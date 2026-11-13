@@ -13,6 +13,7 @@
 | **Aurora / Zanzibar** | **Antiguos / desactualizados a propósito.** No tienen el paquete UX actual. | No copiar de ahí. Solo se actualizan si se decide revisitarlos (usar este flujo). |
 | **Contenerización** | Módulo aparte (Docker → K8s), layout dock. | Fuera de este flujo. |
 | **Redis / MongoDB** | Sistemas prácticos bajo **Sistemas · práctica** (hermanos de Contenerización, no anidados). Study-desk + UX completo. | Misma checklist DoD §3; viven en `redis/` y `mongo/` (no en `papers/`). Hub → `../index.html`. Fuentes: Architecture Notes + PDF curso (Redis); PDF NoSQL + Notion S6–S8 (Mongo). Build helpers opcionales: `_build_*.js` (cuidado §15 LECCIONES). |
+| **Data Warehouse / Apache Spark** | Sistemas prácticos (quiz semana 16). Study-desk + UX completo. | `dwh/dwh_app.html`, `spark/spark_app.html`. Fuentes: `docs/dwh_contenido.md` + DDIA Kleppmann Ch.3 warehouse; `docs/spark_contenido.md` + notebook `docs/Pyspark[Sin_Código].ipynb`. Build: `_build_dwh.js` / `_build_spark.js`. |
 
 ## 1. Estructura de archivos y naming
 

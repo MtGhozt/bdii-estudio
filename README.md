@@ -1,6 +1,6 @@
 # BDII Estudio
 
-Hub estático para estudiar Bases de Datos II: papers (GFS, Bigtable, Aurora, Zanzibar) + sistemas prácticos (Contenerización, Redis, MongoDB).
+Hub estático para estudiar Bases de Datos II: papers (GFS, Bigtable, Aurora, Zanzibar) + sistemas prácticos (Contenerización, Redis, MongoDB, Data Warehouse, Apache Spark).
 
 Estilo: **Study-desk editorial** (hub, papers y Contenerización). Sin backend; progreso en `localStorage`.
 
@@ -34,9 +34,14 @@ papers/gfs|bigtable|aurora|zanzibar/
 contenerizacion/           # Docker → K8s (Study-desk, layout dock)
 redis/redis_app.html       # Redis (Architecture Notes) — hermano bajo Sistemas
 mongo/mongo_app.html       # MongoDB / NoSQL — hermano bajo Sistemas
+dwh/dwh_app.html           # Data Warehouse — Quiz semana 16
+spark/spark_app.html       # Apache Spark / PySpark — Quiz semana 16 + taller
 SISTEMA_HTML_ESTUDIO.md    # spec para generar papers nuevos
 docs/FLUJO_PAPER_NUEVO.md  # checklist + Definition of Done (empezar acá)
 docs/LECCIONES_ERRORES.md  # error log / anti-patrones
+docs/dwh_contenido.md      # fuente de contenido DWH (+ DDIA Kleppmann Ch.3)
+docs/spark_contenido.md    # fuente de contenido Spark + notebook
+docs/Pyspark[Sin_Código].ipynb  # taller de clase PySpark
 ```
 
 ## Añadir un paper nuevo
