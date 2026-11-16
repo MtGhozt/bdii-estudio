@@ -132,6 +132,8 @@ if (aliasStart > 0 && aliasEnd > aliasStart) {
     'parquet':'Parquet', 'delta':'Delta Lake', 'delta lake':'Delta Lake',
     'tokenizer':'Tokenizer', 'stopwords':'StopWordsRemover', 'stopwordsremover':'StopWordsRemover',
     'lda':'LDA', 'lakehouse':'Lakehouse',
+    'medallón':'Medallón', 'medallon':'Medallón', 'bronze':'Medallón', 'silver':'Medallón', 'gold':'Medallón',
+    'block skipping':'Block skipping',
     'udf':'UDF', 'collect':'collect', 'explain':'explain',
     'etl':'ETL', 'elt':'ELT', 'inmon':'Inmon', 'kimball':'Kimball',
     'spark core':'Spark Core', 'spark sql':'Spark SQL', 'graphx':'GraphX', 'sparkml':'SparkML',

@@ -122,6 +122,7 @@ if (aliasStart > 0 && aliasEnd > aliasStart) {
     'slice':'Slice', 'dice':'Dice', 'pivot':'Pivot',
     'molap':'MOLAP', 'rolap':'ROLAP', 'holap':'HOLAP',
     'lakehouse':'Lakehouse', 'data lake':'Data lake',
+    'medallón':'Medallón', 'medallon':'Medallón', 'mpp':'MPP',
     'dimensión fecha':'Dimensión fecha', 'dimension fecha':'Dimensión fecha',
     'no volátil':'No volátil', 'no volatil':'No volátil',
     'orientado al sujeto':'Orientado al sujeto',
@@ -149,7 +150,8 @@ mustRe(/const MODULE_ANIMS = \{[\s\S]*?const QUIZ_MODULE_HINT = \{[\s\S]*?\};\r?
 };
 const QUIZ_MODULE_HINT = {
   'Inmon':'m1', 'OLTP/OLAP':'m1', 'Arquitectura':'m2', 'ETL/ELT':'m3', 'Kimball':'m3',
-  'Grain':'m4', 'Estrella':'m5', 'Medidas':'m6', 'SCD':'m7', 'OLAP':'m8', 'trade-off':'m5'
+  'Grain':'m4', 'Estrella':'m5', 'Medidas':'m6', 'SCD':'m7', 'OLAP':'m8', 'Lake':'m8',
+  'DDIA':'m0', 'trade-off':'m5'
 };
 `, 'MODULE_ANIMS');
 

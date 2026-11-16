@@ -728,6 +728,7 @@ html: `
 <tr><td>ORC</td><td>Columnar</td><td>Ecosistema Hive.</td></tr>
 <tr><td>Avro</td><td>Por filas</td><td>Evolución de esquema y streaming.</td></tr>
 <tr><td>Delta / Iceberg / Hudi</td><td>Capa sobre Parquet</td><td>ACID y time travel: el <strong>lakehouse</strong>.</td></tr></table>
+<div class="callout info"><div class="lbl">[quiz16]</div><strong>Por qué Parquet acelera en el lago.</strong> Misma columna = mismo tipo → compresión fuerte. El pie del archivo guarda stats por bloque (ej. edad min 18 / máx 35): si el filtro es <code>edad &gt; 50</code>, Spark <strong>salta el bloque</strong> sin bajarlo. Además, partición física en carpetas (<code>/ventas/año=2026/mes=11/…</code>): un <code>WHERE año=2026 AND mes=11</code> ignora el resto de carpetas.</div>
 <div class="callout info"><div class="lbl">[clase/notebook]</div>El taller escribe el mismo housing en CSV y en Parquet. Pandas puede leer solo dos columnas del Parquet de salida:</div>
 <pre><code>import pandas as pd
 pd.read_parquet("ejemplo_escritura_1_parquet", columns=["total_rooms", "total_bedrooms"])</code></pre>
@@ -773,7 +774,9 @@ lda = LDA(k=10, maxIter=10, featuresCol="vectors")</code></pre>
 <h3>Puente con el DWH</h3>
 <div class="callout info"><div class="lbl">[resumen]</div>Spark hace el <strong>ETL/ELT</strong>: lee crudo del data lake (S3 o HDFS), limpia, agrega y escribe al DWH o a tablas curadas. En un <strong>lakehouse</strong> consulta Parquet, Delta o Iceberg con ACID. También arma hechos y dimensiones (Kimball) a partir de lo ya procesado. El ELT moderno carga crudo al lago y transforma con Spark o dbt en el destino. Snowflake, BigQuery o Redshift pueden ocupar partes del pipeline; Spark sigue siendo el motor de preparación.</div>
 <div class="callout tip"><div class="lbl">[Fundamentals]</div>Un lake sin catálogo ni capa ACID degenera en <em>data swamp</em>. Preferí Parquet (no CSV) para schema-on-read; evitá miles de archivos diminutos (un PUT por fila). Un MERGE/CDC fila a fila sobre columnar es Copy-on-Write caro: loteá. Lambda (batch+stream duplicados) solo si hace falta; Kappa unifica en un stream con replay.</div>
+<div class="callout info"><div class="lbl">[quiz16]</div><strong>Medallón.</strong> Bronze = crudo con timestamp (inmutable). Silver = Spark limpia y tipa, escribe Parquet. Gold = agregados para BI/DWH. El log de transacciones (Delta/Iceberg) habilita cambios atómicos y time travel sobre el lago de archivos.</div>
 <table><tr><th>Tema</th><th>Idea para cuando el quiz mezcla modelo</th></tr>
+<tr><td>Bronze / Silver / Gold</td><td>Crudo → limpio → curado. Spark suele vivir en Silver.</td></tr>
 <tr><td>Inmon</td><td>DWH integrado, orientado a temas, histórico, no volátil.</td></tr>
 <tr><td>Kimball</td><td>Estrella o copo. La granularidad se define primero. Dimensiones conformadas.</td></tr>
 <tr><td>OLTP vs OLAP</td><td>Transacciones contra análisis agregado.</td></tr>
@@ -828,7 +831,10 @@ const QUIZ = [
 {tag:'Shuffle', c:'blue', q:'Para sumar montos por clave, groupByKey().map(sum) frente a reduceByKey…', opts:['Es igual de barato en red','Manda todos los valores crudos y puede OOM','Evita el shuffle por completo','Solo corre en el driver'], a:1, why:'[Learning Spark] reduceByKey hace combine local antes del shuffle. groupByKey no.'},
 {tag:'Lazy', c:'gold', q:'Si solo haces filter/select y print("listo") sin count/show/write…', opts:['Spark ya leyó el archivo entero','No se ejecutó nada: solo creció el plan lazy','Obligas un shuffle','Se dispara un job vacío'], a:1, why:'[Learning Spark] Sin acción no hay stages ni lectura. El print engaña.'},
 {tag:'Shuffle', c:'blue', q:'Tras repartition/partitionBy de un dataset que reusas, si omites persist…', opts:['El shuffle queda materializado para siempre','Cada acción puede rehacer el shuffle desde el linaje','Catalyst lo cachea solo','coalesce deja de funcionar'], a:1, why:'[Learning Spark] partitionBy/repartition son lazy. Sin persist, cada acción reevalúa.'},
-{tag:'Opt', c:'purple', q:'Un lago con CSV crudo + SELECT * pay-per-scan suele…', opts:['Aprovechar column pruning automáticamente','Romperse con cambios de esquema y disparar facturas altas','Dar ACID gratis','Ser el formato preferido de Catalyst'], a:1, why:'[Fundamentals] Schema-on-read con CSV es frágil; SELECT * anula pruning. Prefiere Parquet/particionado.'}
+{tag:'Opt', c:'purple', q:'Un lago con CSV crudo + SELECT * pay-per-scan suele…', opts:['Aprovechar column pruning automáticamente','Romperse con cambios de esquema y disparar facturas altas','Dar ACID gratis','Ser el formato preferido de Catalyst'], a:1, why:'[Fundamentals] Schema-on-read con CSV es frágil; SELECT * anula pruning. Prefiere Parquet/particionado.'},
+{tag:'Opt', c:'purple', q:'Si Parquet anota en el pie “edad 18–35” y filtras edad > 50…', opts:['Spark descarga el bloque igual','Puede saltar el bloque sin leer los datos','Obliga un shuffle wide','Convierte el archivo a CSV'], a:1, why:'[quiz16] Stats del footer + predicate pushdown = block skipping.'},
+{tag:'DWH', c:'gold', q:'Carpetas /ventas/año=2026/mes=11/ en el lago sirven para…', opts:['Forzar un collect al driver','Que el WHERE por año/mes ignore el resto de carpetas','Reemplazar a Catalyst','Borrar Bronze cada noche'], a:1, why:'[quiz16] Partición física (Hive-style): menos archivos escaneados, menos costo.'},
+{tag:'DWH', c:'teal', q:'En el medallón, ¿quién limpia nulos y tipos hacia Parquet?', opts:['La capa Gold sola, sin motor','Silver, típicamente con Spark','Solo el POS','El cluster manager'], a:1, why:'[quiz16] Bronze aterriza; Silver limpia; Gold agrega para BI.'}
 ];
 
 const CASES = [
@@ -888,6 +894,8 @@ const GLOSSARY = [
 ['Broadcast join','Copia una tabla pequeña a los executors para no shufflear la grande. (resumen)'],
 ['Parquet','Formato columnar comprimido. El preferido para leer y escribir en Spark. (resumen)'],
 ['Delta Lake','Capa ACID y time travel sobre Parquet. Pieza de un lakehouse. (resumen)'],
+['Medallón','Bronze crudo, Silver limpio (Spark), Gold curado para BI. (quiz16)'],
+['Block skipping','Saltar bloques de Parquet gracias a min/max en el footer. (quiz16)'],
 ['Tokenizer','Parte una columna de texto en una lista de palabras. En el taller, sobre text_clean. (notebook)'],
 ['StopWordsRemover','Quita artículos y preposiciones de esa lista de tokens. (notebook)'],
 ['LDA','Modelo de tópicos no supervisado. Va después de CountVectorizer e IDF. (notebook)'],
@@ -945,6 +953,8 @@ function buildTipIndex(){
     'parquet':'Parquet', 'delta':'Delta Lake', 'delta lake':'Delta Lake',
     'tokenizer':'Tokenizer', 'stopwords':'StopWordsRemover', 'stopwordsremover':'StopWordsRemover',
     'lda':'LDA', 'lakehouse':'Lakehouse',
+    'medallón':'Medallón', 'medallon':'Medallón', 'bronze':'Medallón', 'silver':'Medallón', 'gold':'Medallón',
+    'block skipping':'Block skipping',
     'udf':'UDF', 'collect':'collect', 'explain':'explain',
     'etl':'ETL', 'elt':'ELT', 'inmon':'Inmon', 'kimball':'Kimball',
     'spark core':'Spark Core', 'spark sql':'Spark SQL', 'graphx':'GraphX', 'sparkml':'SparkML',
