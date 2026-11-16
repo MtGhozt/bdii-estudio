@@ -27,7 +27,13 @@ function mustRe(re, newStr, label) {
   console.log('OK', label);
 }
 
-must('        <small>BDII Estudio · Quiz semana 16 · PySpark</small>',
+function replaceIf(oldStr, newStr, label) {
+  if (!html.includes(oldStr)) { console.log('SKIP', label); return; }
+  html = html.replace(oldStr, newStr);
+  console.log('OK', label);
+}
+
+replaceIf('        <small>BDII Estudio · Quiz semana 16 · PySpark</small>',
   '        <small>BDII Estudio · PySpark · resumen + Colab</small>', 'brand');
 console.log('OK identity already spark (title, hub, shuffle, storage)');
 
@@ -79,7 +85,7 @@ const inicioHTML = `<section id="view-inicio" class="view active">
   <ol class="path">
     <li><button class="path-step" onclick="go('aprende')"><span class="path-n">01</span><span><span class="path-t">Aprende</span><span class="path-d">10 módulos (m0–m9). Hover en términos del glosario.</span></span></button></li>
     <li><button class="path-step" onclick="go('animaciones')"><span class="path-n">02</span><span><span class="path-t">Animaciones</span><span class="path-d">CPU y RAM, arquitectura, lazy, shuffle, Catalyst y tokens.</span></span></button></li>
-    <li><button class="path-step" onclick="go('quiz')"><span class="path-n">03</span><span><span class="path-t">Quiz y casos</span><span class="path-d">38 preguntas del resumen y del Colab, más casos de los quirks del notebook.</span></span></button></li>
+    <li><button class="path-step" onclick="go('quiz')"><span class="path-n">03</span><span><span class="path-t">Quiz y casos</span><span class="path-d">Preguntas del resumen, Colab y trampas de Learning Spark / Fundamentals, más casos.</span></span></button></li>
   </ol>
 </section>
 `;
@@ -97,7 +103,7 @@ console.log('DATA', JSON.stringify(ctx.__counts));
 if (ctx.__counts.m !== 10 || ctx.__counts.ids !== 'm0,m1,m2,m3,m4,m5,m6,m7,m8,m9') {
   console.error('FAIL module ids'); process.exit(1);
 }
-if (ctx.__counts.q < 32 || ctx.__counts.q > 38) { console.error('FAIL quiz count'); process.exit(1); }
+if (ctx.__counts.q < 32 || ctx.__counts.q > 50) { console.error('FAIL quiz count', ctx.__counts.q); process.exit(1); }
 if (ctx.__counts.cs < 6) { console.error('FAIL cases'); process.exit(1); }
 if (ctx.__counts.g < 30) { console.error('FAIL glossary'); process.exit(1); }
 html = html.slice(0, mStart) + data + '\n' + html.slice(tipStart);
@@ -156,8 +162,12 @@ const QUIZ_MODULE_HINT = {
 };
 `, 'MODULE_ANIMS');
 
-must('animWebtable.init(); animLocate.init(); animServe.init(); animRecovery.init(); animRead.init();',
+replaceIf('animWebtable.init(); animLocate.init(); animServe.init(); animRecovery.init(); animRead.init();',
   'animCpu.init(); animArch.init(); animLazy.init(); animShuffle.init(); animPipeline.init(); animTokens.init();', 'initAnims');
+if (!html.includes('animCpu.init()')) {
+  console.error('FAIL initAnims: animCpu.init missing');
+  process.exit(1);
+}
 
 const animViewStart = html.indexOf('<section id="view-animaciones"');
 const animViewEnd = html.indexOf('<section id="view-quiz"');
@@ -200,7 +210,8 @@ const animHTML = `<section id="view-animaciones" class="view">
 html = html.slice(0, animViewStart) + animHTML + html.slice(animViewEnd);
 console.log('OK anim HTML');
 
-const animJsStart = html.indexOf('const animWebtable = ');
+let animJsStart = html.indexOf('const animWebtable = ');
+if (animJsStart < 0) animJsStart = html.indexOf('const animCpu = ');
 const bootMarker = "renderModuleNav(); renderModule(); renderCases(); renderGlossary(''); updateProgress(); updateContinueCard();";
 const bootStart = html.indexOf(bootMarker);
 if (animJsStart < 0 || bootStart < 0) { console.error('anim js markers', { animJsStart, bootStart }); process.exit(1); }
@@ -208,21 +219,21 @@ const animJs = fs.readFileSync(path.join(__dirname, '_spark_anims.js'), 'utf8');
 html = html.slice(0, animJsStart) + animJs + '\n' + html.slice(bootStart);
 console.log('OK anim JS');
 
-must('Sigue los módulos en orden. Los términos del glosario aparecen con <strong>subrayado punteado</strong>: hover o tap abre la burbuja. Los <strong>Trade-off</strong> son los que más caen en el quiz.',
+replaceIf('Sigue los módulos en orden. Los términos del glosario aparecen con <strong>subrayado punteado</strong>: hover o tap abre la burbuja. Los <strong>Trade-off</strong> son los que más caen en el quiz.',
   'Sigue los módulos en orden (m0–m9). Fuente: resumen DWH/Spark y el notebook de Colab. Las etiquetas <strong>[resumen]</strong>, <strong>[clase/notebook]</strong> y <strong>[didáctico]</strong> dicen de dónde sale cada bloque. Los términos subrayados abren el glosario.',
   'aprende lede');
-must('Herramienta de estudio sobre "Bigtable: A Distributed Storage System for Structured Data" (OSDI 2006). Leer → animar → practicar.',
+replaceIf('Herramienta de estudio sobre "Bigtable: A Distributed Storage System for Structured Data" (OSDI 2006). Leer → animar → practicar.',
   'Herramienta de estudio sobre Apache Spark y PySpark (resumen DWH/Spark y notebook de Colab). Leer → animar → practicar.',
   'footer');
-must('placeholder="Filtra por término o definición (ej: bloom, compaction, tablet)…"',
+replaceIf('placeholder="Filtra por término o definición (ej: bloom, compaction, tablet)…"',
   'placeholder="Filtra por término (ej: shuffle, Catalyst, linaje)…"',
   'glossary placeholder');
-must('Misma fuente que las burbujas del Aprende. Escribe para filtrar (ej: bloom, compaction, Boxwood).',
+replaceIf('Misma fuente que las burbujas del Aprende. Escribe para filtrar (ej: bloom, compaction, Boxwood).',
   'Misma fuente que las burbujas del Aprende. Escribe para filtrar (ej: shuffle, Catalyst, linaje).',
   'glossary lede');
-must('>Glosario bilingüe<', '>Glosario<', 'glossary title');
-must('Módulos 0/9', 'Módulos 0/10', 'progress');
-must('// Deep-link hash: #aprende/m5 or #animaciones/anim-read or #quiz',
+replaceIf('>Glosario bilingüe<', '>Glosario<', 'glossary title');
+replaceIf('Módulos 0/9', 'Módulos 0/10', 'progress');
+replaceIf('// Deep-link hash: #aprende/m5 or #animaciones/anim-read or #quiz',
   '// Deep-link hash: #aprende/m6 or #animaciones/anim-lazy or #quiz',
   'deeplink');
 
