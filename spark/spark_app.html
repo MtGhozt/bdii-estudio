@@ -628,6 +628,7 @@ spark.sql("SELECT housing_median_age FROM Housing LIMIT 10").show()</code></pre>
 <tr><td>Hoy en PySpark</td><td>Legado</td><td><strong>La API a usar</strong></td><td>No es el camino Python</td></tr></table><div class="callout info"><div class="lbl">[resumen]</div>En Scala, <code>DataFrame = Dataset[Row]</code>. El Dataset tipado solo existe en Scala/Java. En PySpark el camino es el DataFrame.</div>
 <div class="callout warn"><div class="lbl">[clase/notebook]</div><strong>Quirk de tipos.</strong> Un ejemplo del notebook mezcla <code>IntegerType</code> en <code>total_rooms</code> con <code>DoubleType</code> en otras columnas. Si el header no calza, aparecen nulos raros. Mejor un esquema homogÃ©neo (todo double en la lectura) y el cast explÃ­cito despuÃ©s, o <code>inferSchema=True</code> mÃ¡s un cast.</div>
 <div class="trade"><b>Trade-off 5 Â· inferSchema vs esquema declarado.</b> Ganas con inferir: una lÃ­nea y a explorar. Pierdes: una pasada extra y tipos adivinados. En producciÃ³n se declara.</div>
+<h3>Pipeline housing (corregido)</h3><pre><code>df_conv.repartition(4).write.mode(overwrite).parquet(output/housing_parquet)</code></pre>
 `,
 mini:{q:'Una vista temporal creada con createOrReplaceTempViewâ€¦', opts:['Queda publicada en el DWH','Vive solo en esa SparkSession','Escribe Parquet','Desactiva Catalyst'], a:1, why:'Misma sesiÃ³n, mismo Catalyst que el API DataFrame. Al cerrar, desaparece.'} },
 { id:'m6', tag:'MÃ³dulo 6', accent:'gold', title:'EjecuciÃ³n perezosa, map-reduce y acciones',
