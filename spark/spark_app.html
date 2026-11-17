@@ -358,6 +358,7 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
 }
 
 </style>
+  <link rel="stylesheet" href="../assets/learn-stage.css">
 </head>
 <body><a class="skip-link" href="#main">Saltar al contenido</a>
 <header>
@@ -368,7 +369,6 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
     <nav class="tabs" id="tabs" role="tablist" aria-label="Vistas de estudio">
       <button class="tab active" role="tab" aria-selected="true" data-view="inicio">Inicio</button>
       <button class="tab" role="tab" aria-selected="false" data-view="aprende">Aprende</button>
-      <button class="tab" role="tab" aria-selected="false" data-view="animaciones">Animaciones</button>
       <button class="tab" role="tab" aria-selected="false" data-view="quiz">Quiz & Casos</button>
       <button class="tab" role="tab" aria-selected="false" data-view="glosario">Glosario</button>
       <button class="tab" role="tab" aria-selected="false" data-view="cheatsheet">Cheatsheet</button>
@@ -423,7 +423,7 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
   <p class="lede">Tres pasos, en orden. Cada uno prepara el siguiente.</p>
   <ol class="path">
     <li><button class="path-step" onclick="go('aprende')"><span class="path-n">01</span><span><span class="path-t">Aprende</span><span class="path-d">10 módulos (m0–m9). Hover en términos del glosario.</span></span></button></li>
-    <li><button class="path-step" onclick="go('animaciones')"><span class="path-n">02</span><span><span class="path-t">Animaciones</span><span class="path-d">CPU y RAM, arquitectura, lazy, shuffle, Catalyst y tokens.</span></span></button></li>
+    <li><button class="path-step" onclick="go('aprende')"><span class="path-n">02</span><span><span class="path-t">Figuras en Aprende</span><span class="path-d">Los esquemas y los flujos están junto al párrafo que los explica.</span></span></button></li>
     <li><button class="path-step" onclick="go('quiz')"><span class="path-n">03</span><span><span class="path-t">Quiz y casos</span><span class="path-d">Preguntas del resumen, Colab y trampas de Learning Spark / Fundamentals, más casos.</span></span></button></li>
   </ol>
 </section>
@@ -432,41 +432,6 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
   <h2>Aprende Apache Spark desde cero</h2>
   <p class="lede">Sigue los módulos en orden (m0–m9). Fuente: resumen DWH/Spark y el notebook de Colab. Las etiquetas <strong>[resumen]</strong>, <strong>[clase/notebook]</strong> y <strong>[didáctico]</strong> dicen de dónde sale cada bloque. Los términos subrayados abren el glosario.</p>
   <div class="aprende-layout"><nav class="module-nav" id="moduleNav"></nav><div class="module-content" id="moduleContent"></div></div>
-</section>
-<section id="view-animaciones" class="view">
-  <span class="kicker">Laboratorio visual</span>
-  <h2>Animaciones interactivas</h2>
-  <p class="lede">Del un solo CPU al DAG, el shuffle, Catalyst y la limpieza de tweets. Cada animación tiene play, paso y narrador.</p>
-  <div class="card accent-blue" id="anim-cpu"><h3>1 · CPU, RAM y los dos límites</h3>
-    <p style="font-size:14px;">Pandas y numpy en un hilo. La RAM guarda datos e intermedios; el tiempo es el otro techo.</p>
-    <div class="controls"><button class="btn small" onclick="animCpu.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animCpu.play()">Reproducir</button><button class="btn small ghost" onclick="animCpu.reset()">Reiniciar</button></div>
-    <figure><svg id="svgGraph" viewBox="0 0 720 360" role="img"></svg><figcaption>Recursos · <span id="graphCaption">Pulsa "Siguiente paso".</span></figcaption></figure>
-    <p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m0')">Leer en Aprende → Módulo 0</button></p></div>
-  <div class="card accent-purple" id="anim-arch"><h3>2 · Driver, cluster manager y executors</h3>
-    <p style="font-size:14px;">El driver arma el DAG. El CM asigna. Los executors corren tasks y guardan cache. <code>local[*]</code>, client o cluster.</p>
-    <div class="controls"><button class="btn small" onclick="animArch.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animArch.play()">Reproducir</button><button class="btn small ghost" onclick="animArch.reset()">Reiniciar</button></div>
-    <figure><svg id="svgCheck" viewBox="0 0 720 360" role="img"></svg><figcaption>Arquitectura · <span id="checkCaption">Pulsa "Siguiente paso".</span></figcaption></figure>
-    <p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m3')">Leer en Aprende → Módulo 3</button></p></div>
-  <div class="card accent-teal" id="anim-lazy"><h3>3 · Lazy: el plan espera a la acción</h3>
-    <p style="font-size:14px;"><code>select</code> y <code>filter</code> no ejecutan. <code>explain</code> muestra el plan. <code>show</code>, <code>count</code> o <code>write</code> disparan el job.</p>
-    <div class="controls"><button class="btn small" onclick="animLazy.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animLazy.play()">Reproducir</button><button class="btn small ghost" onclick="animLazy.reset()">Reiniciar</button></div>
-    <figure><svg id="svgEnemy" viewBox="0 0 720 360" role="img"></svg><figcaption>Lazy · <span id="enemyCaption">Pulsa "Siguiente paso".</span></figcaption></figure>
-    <p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m6')">Leer en Aprende → Módulo 6</button></p></div>
-  <div class="card accent-orange" id="anim-shuffle"><h3>4 · Narrow, wide, stages y cache</h3>
-    <p style="font-size:14px;">El shuffle es la frontera cara. <code>repartition</code> lo paga; <code>coalesce</code> solo reduce particiones. <code>persist</code> si hay varias acciones.</p>
-    <div class="controls"><button class="btn small" onclick="animShuffle.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animShuffle.play()">Reproducir</button><button class="btn small ghost" onclick="animShuffle.reset()">Reiniciar</button></div>
-    <figure><svg id="svgZookie" viewBox="0 0 720 360" role="img"></svg><figcaption>Shuffle · <span id="zookieCaption">Pulsa "Siguiente paso".</span></figcaption></figure>
-    <p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m7')">Leer en Aprende → Módulo 7</button></p></div>
-  <div class="card accent-gold" id="anim-pipeline"><h3>5 · Catalyst, Tungsten, AQE y Parquet</h3>
-    <p style="font-size:14px;">Pushdown y pruning, ejecución off-heap, reoptimización en runtime, y broadcast cuando la dimensión es chica.</p>
-    <div class="controls"><button class="btn small" onclick="animPipeline.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animPipeline.play()">Reproducir</button><button class="btn small ghost" onclick="animPipeline.reset()">Reiniciar</button></div>
-    <figure><svg id="svgArch" viewBox="0 0 720 360" role="img"></svg><figcaption>Optimización · <span id="archCaption">Pulsa "Siguiente paso".</span></figcaption></figure>
-    <p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m8')">Leer en Aprende → Módulo 8</button></p></div>
-  <div class="card accent-pink" id="anim-tokens"><h3>6 · Tweets: regex, tokens y LDA</h3>
-    <p style="font-size:14px;">Schema explícito, limpieza a <code>text_clean</code>, Tokenizer, stopwords, explode y el trío CountVectorizer → IDF → LDA.</p>
-    <div class="controls"><button class="btn small" onclick="animTokens.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animTokens.play()">Reproducir</button><button class="btn small ghost" onclick="animTokens.reset()">Reiniciar</button></div>
-    <figure><svg id="svgTok" viewBox="0 0 720 360" role="img"></svg><figcaption>Texto · <span id="tokCaption">Pulsa "Siguiente paso".</span></figcaption></figure>
-    <p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m9')">Leer en Aprende → Módulo 9</button></p></div>
 </section>
 <section id="view-quiz" class="view">
   <span class="kicker">Comprueba tu aprendizaje</span>
@@ -530,7 +495,7 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
   <div id="cheatsheetContent"></div>
 </section>
 </main>
-<footer>Herramienta de estudio sobre Apache Spark y PySpark (resumen DWH/Spark y notebook de Colab). Leer → animar → practicar.</footer>
+<footer>Herramienta de estudio sobre Apache Spark y PySpark (resumen DWH/Spark y notebook de Colab). Leer con las figuras → practicar.</footer>
 <script>
 const MODULES = [
 { id:'m0', tag:'Módulo 0', accent:'gold', title:'Recursos: CPU, RAM y los dos límites',
@@ -1072,15 +1037,7 @@ function seededRandom(seed){ let s=seed>>>0; return ()=>{ s=(Math.imul(s,1664525
 function prepareShuffledMCQ(opts,correctIndex,seedKey){ const indices=opts.map((_,i)=>i); const rand=seededRandom(hashSeedStr(seedKey)); for(let i=indices.length-1;i>0;i--){ const j=Math.floor(rand()*(i+1)); [indices[i],indices[j]]=[indices[j],indices[i]]; } return { opts:indices.map(ix=>opts[ix]), a:indices.indexOf(correctIndex) }; }
 function shuffledQuizItem(qi){ const q=QUIZ[qi]; return prepareShuffledMCQ(q.opts,q.a,PAPER_SHUFFLE_ID+'|quiz|'+qi); }
 function shuffledMini(m){ return prepareShuffledMCQ(m.mini.opts,m.mini.a,PAPER_SHUFFLE_ID+'|mini|'+m.id); }
-const MODULE_ANIMS = {
-  m0: [{id:'anim-cpu', label:'CPU, RAM y límites'}],
-  m1: [{id:'anim-cpu', label:'Un CPU vs muchos núcleos'}],
-  m3: [{id:'anim-arch', label:'Driver, executors, CM'}],
-  m6: [{id:'anim-lazy', label:'Lazy: plan y acción'}],
-  m7: [{id:'anim-shuffle', label:'Narrow, wide y shuffle'}],
-  m8: [{id:'anim-pipeline', label:'Catalyst, AQE, Parquet'}],
-  m9: [{id:'anim-tokens', label:'Tweets, tokens y LDA'}]
-};
+const MODULE_ANIMS = {};
 const QUIZ_MODULE_HINT = {
   'CPU':'m0', 'Paralelo':'m1', 'Spark':'m2', 'Stack':'m3',
   'Sesion':'m4', 'Quirk':'m4', 'DF':'m5', 'Lazy':'m6',
@@ -1095,6 +1052,7 @@ function saveJSON(key, val){ try{ localStorage.setItem(key, JSON.stringify(val))
 
 function go(view, opts){
   opts = opts || {};
+  if (view === 'animaciones') view = 'aprende';
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   const elv = $('#view-'+view);
   if (!elv) return;
@@ -1106,7 +1064,6 @@ function go(view, opts){
   });
   if (!opts.keepScroll) window.scrollTo({top:0, behavior: opts.instant ? 'auto' : 'smooth'});
   if (view==='quiz' && !quiz.rendered) quiz.render();
-  if (view==='animaciones' && !animsRendered) initAnims();
   if (view==='quiz' && opts.panel) setQuizPanel(opts.panel);
   if (view==='animaciones' && opts.animId) {
     requestAnimationFrame(()=>{
@@ -1181,7 +1138,7 @@ function updateContinueCard(){
   } else if (lastView.view === 'quiz') {
     detail = '<strong>Quiz</strong> — modo ' + (lastView.mode||'estudio') + (quizWrong.length ? ' · ' + quizWrong.length + ' falladas guardadas' : '') + (quizScores.length ? ' · último ' + quizScores[quizScores.length-1] + '%' : '');
   } else if (lastView.view === 'animaciones') {
-    detail = '<strong>Animaciones</strong> — laboratorio visual';
+    detail = '<strong>Aprende</strong> — figuras junto al texto';
   } else if (lastView.view === 'glosario') {
     detail = '<strong>Glosario</strong>';
   } else if (lastView.view === 'cheatsheet') {
@@ -1924,5 +1881,7 @@ enhanceTips($('#cheatsheetContent'));
   else if (parts[0]==='cheatsheet') go('cheatsheet', {instant:true});
 })();
 </script>
+<script src="../assets/gsap.min.js"></script>
+<script src="../assets/learn-stage.js"></script>
 </body>
 </html>

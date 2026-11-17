@@ -355,6 +355,7 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
 }
 
 </style>
+  <link rel="stylesheet" href="../assets/learn-stage.css">
 </head>
 <body><a class="skip-link" href="#main">Saltar al contenido</a>
 <header>
@@ -365,7 +366,6 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
     <nav class="tabs" id="tabs" role="tablist" aria-label="Vistas de estudio">
       <button class="tab active" role="tab" aria-selected="true" data-view="inicio">Inicio</button>
       <button class="tab" role="tab" aria-selected="false" data-view="aprende">Aprende</button>
-      <button class="tab" role="tab" aria-selected="false" data-view="animaciones">Animaciones</button>
       <button class="tab" role="tab" aria-selected="false" data-view="quiz">Quiz & Casos</button>
       <button class="tab" role="tab" aria-selected="false" data-view="glosario">Glosario</button>
       <button class="tab" role="tab" aria-selected="false" data-view="cheatsheet">Cheatsheet</button>
@@ -410,7 +410,7 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
   <p class="lede">Tres pasos, en orden. Cada uno prepara el siguiente.</p>
   <ol class="path">
     <li><button class="path-step" onclick="go('aprende')"><span class="path-n">01</span><span><span class="path-t">Aprende</span><span class="path-d">8 módulos (cobertura de las 45 slides + notas de clase semanas 6–8). Pasa el cursor o toca un término subrayado para ver la burbuja del glosario.</span></span></button></li>
-    <li><button class="path-step" onclick="go('animaciones')"><span class="path-n">02</span><span><span class="path-t">Animaciones</span><span class="path-d">CAP (CP vs AP), jerarquía de documentos, CRUD, replica set con oplog y failover, sharding con chunks y mongos.</span></span></button></li>
+    <li><button class="path-step" onclick="go('aprende')"><span class="path-n">02</span><span><span class="path-t">Figuras en Aprende</span><span class="path-d">Los esquemas y los flujos están junto al párrafo que los explica.</span></span></button></li>
     <li><button class="path-step" onclick="go('quiz')"><span class="path-n">03</span><span><span class="path-t">Quiz y casos</span><span class="path-d">39 preguntas (taxonomía, CAP, NoSQL vs RDBMS, MongoDB, CRUD, índices, aggregation, replicación, sharding) + 8 casos, incluido el laboratorio Docker de replica set (didáctico / de clase). Si fallas, el hueco es de estudio — no de contenido faltante.</span></span></button></li>
   </ol>
 </section>
@@ -419,16 +419,6 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
   <h2>Aprende MongoDB desde cero</h2>
   <p class="lede">Sigue los módulos en orden. Los términos del glosario aparecen con <strong>subrayado punteado</strong>: hover o tap abre la burbuja. Los <strong>Trade-off</strong> son los que más caen en el quiz.</p>
   <div class="aprende-layout"><nav class="module-nav" id="moduleNav"></nav><div class="module-content" id="moduleContent"></div></div>
-</section>
-<section id="view-animaciones" class="view">
-  <span class="kicker">Laboratorio visual</span>
-  <h2>Animaciones interactivas</h2>
-  <p class="lede">Pulsa los botones y observa el sistema en movimiento. Cada animación muestra su estado (play / pausa / listo), barra de progreso y narrador paso a paso. Algunas tienen un selector de modo que reinicia la escena.</p>
-  <div class="card accent-orange" id="anim-cap"><h3>1 · Teorema CAP: partición, CP vs AP</h3><p style="font-size:14px;">Dos réplicas A y B. Se escribe en A, se corta la red y se lee en B: un sistema <strong>CP</strong> rechaza la lectura (sacrifica disponibilidad); uno <strong>AP</strong> responde con dato viejo (sacrifica coherencia). En <strong>CA</strong> no hay partición (slide 7).</p><div class="controls"><button class="btn small" data-mode="CP" onclick="animCap.setMode('CP')">Modo CP (MongoDB)</button><button class="btn small" data-mode="AP" onclick="animCap.setMode('AP')">Modo AP</button><button class="btn small" data-mode="CA" onclick="animCap.setMode('CA')">Modo CA (sin partición)</button><button class="btn small" onclick="animCap.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animCap.play()">Reproducir</button><button class="btn small ghost" onclick="animCap.reset()">Reiniciar</button></div><figure><svg id="svgCap" viewBox="0 0 720 340" role="img" aria-label="Teorema CAP con dos réplicas"></svg><figcaption>CAP · <span id="capCaption">Elige un modo y pulsa "Siguiente paso".</span></figcaption></figure><p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m1')">Leer en Aprende → Módulo 1 · Teorema CAP</button></p></div>
-  <div class="card accent-teal" id="anim-doc"><h3>2 · Jerarquía: DB → colección → documento → campo</h3><p style="font-size:14px;">Baja por la jerarquía (slide 20) y alterna entre la vista MongoDB y la vista RDBMS (slide 21): los documentos de una colección pueden tener <strong>campos distintos</strong> (slide 25); las filas de una tabla no.</p><div class="controls"><button class="btn small" data-mode="mongo" onclick="animDoc.setMode('mongo')">Vista MongoDB</button><button class="btn small" data-mode="rdbms" onclick="animDoc.setMode('rdbms')">Vista RDBMS</button><button class="btn small" onclick="animDoc.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animDoc.play()">Reproducir</button><button class="btn small ghost" onclick="animDoc.reset()">Reiniciar</button></div><figure><svg id="svgDoc" viewBox="0 0 720 380" role="img" aria-label="Jerarquía de objetos MongoDB"></svg><figcaption>Jerarquía · <span id="docCaption">Pulsa "Siguiente paso".</span></figcaption></figure><p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m3')">Leer en Aprende → Módulo 3 · MongoDB, BSON y jerarquía</button></p></div>
-  <div class="card accent-purple" id="anim-crud"><h3>3 · CRUD: insert, find, update, remove</h3><p style="font-size:14px;">Ejemplo de la slide 35 sobre la colección <code>user</code>. Elige el operador del <code>find</code> (<code>$gt</code> o <code>$lt</code>) antes de avanzar y mira qué documentos devuelve el cursor.</p><div class="controls"><button class="btn small" data-mode="gt" onclick="animCrud.setMode('gt')">find: age $gt 30</button><button class="btn small" data-mode="lt" onclick="animCrud.setMode('lt')">find: age $lt 30</button><button class="btn small" onclick="animCrud.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animCrud.play()">Reproducir</button><button class="btn small ghost" onclick="animCrud.reset()">Reiniciar</button></div><figure><svg id="svgCrud" viewBox="0 0 720 340" role="img" aria-label="Operaciones CRUD sobre la colección user"></svg><figcaption>CRUD · <span id="crudCaption">Pulsa "Siguiente paso".</span></figcaption></figure><p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m4')">Leer en Aprende → Módulo 4 · CRUD y operadores</button></p></div>
-  <div class="card accent-blue" id="anim-replica"><h3>4 · Replica set: oplog, elección y rollback</h3><p style="font-size:14px;">Primary + 2 secondaries replican el <strong>oplog</strong> de forma asíncrona. Elige desde dónde lees en el paso 3 (<strong>primary</strong> = lectura estricta; <strong>secondary</strong> = coherencia eventual) y observa la caída del primary, la votación y el rollback (slides 40–41).</p><div class="controls"><button class="btn small" data-mode="primary" onclick="animReplica.setMode('primary')">Leer del primary</button><button class="btn small" data-mode="secondary" onclick="animReplica.setMode('secondary')">Leer de un secondary</button><button class="btn small" onclick="animReplica.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animReplica.play()">Reproducir</button><button class="btn small ghost" onclick="animReplica.reset()">Reiniciar</button></div><figure><svg id="svgReplica" viewBox="0 0 720 390" role="img" aria-label="Replica set con oplog y failover"></svg><figcaption>Replica set · <span id="replicaCaption">Pulsa "Siguiente paso".</span></figcaption></figure><p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m6')">Leer en Aprende → Módulo 6 · Replica sets</button></p></div>
-  <div class="card accent-gold" id="anim-shard"><h3>5 · Sharding: chunks, config servers y mongos</h3><p style="font-size:14px;">El cliente habla solo con <strong>mongos</strong>; este consulta los <strong>config servers</strong> y enruta a los shards. Alterna la shard key <strong>range</strong> o <strong>hash</strong> y compara la consulta dirigida, el scatter-gather, el split y la migración del balanceador.</p><div class="controls"><button class="btn small" data-mode="range" onclick="animShard.setMode('range')">Shard key: range</button><button class="btn small" data-mode="hash" onclick="animShard.setMode('hash')">Shard key: hash</button><button class="btn small" onclick="animShard.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animShard.play()">Reproducir</button><button class="btn small ghost" onclick="animShard.reset()">Reiniciar</button></div><figure><svg id="svgShard" viewBox="0 0 720 400" role="img" aria-label="Cluster shardeado con mongos y config servers"></svg><figcaption>Sharding · <span id="shardCaption">Pulsa "Siguiente paso".</span></figcaption></figure><p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m7')">Leer en Aprende → Módulo 7 · Sharding</button></p></div>
 </section>
 <section id="view-quiz" class="view">
   <span class="kicker">Comprueba tu aprendizaje</span>
@@ -492,7 +482,7 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
   <div id="cheatsheetContent"></div>
 </section>
 </main>
-<footer>Herramienta de estudio sobre "Introducción a NoSQL y MongoDB" (PDF, 45 slides) y notas de clase (Notion, semanas 6–8). Leer → animar → practicar.</footer>
+<footer>Herramienta de estudio sobre "Introducción a NoSQL y MongoDB" (PDF, 45 slides) y notas de clase (Notion, semanas 6–8). Leer con las figuras → practicar.</footer>
 <script>
 const MODULES = [
 { id:'m0', tag:'Módulo 0', accent:'gold', title:'Intro NoSQL, taxonomía y arquitectura',
@@ -1133,14 +1123,7 @@ function seededRandom(seed){ let s=seed>>>0; return ()=>{ s=(Math.imul(s,1664525
 function prepareShuffledMCQ(opts,correctIndex,seedKey){ const indices=opts.map((_,i)=>i); const rand=seededRandom(hashSeedStr(seedKey)); for(let i=indices.length-1;i>0;i--){ const j=Math.floor(rand()*(i+1)); [indices[i],indices[j]]=[indices[j],indices[i]]; } return { opts:indices.map(ix=>opts[ix]), a:indices.indexOf(correctIndex) }; }
 function shuffledQuizItem(qi){ const q=QUIZ[qi]; return prepareShuffledMCQ(q.opts,q.a,PAPER_SHUFFLE_ID+'|quiz|'+qi); }
 function shuffledMini(m){ return prepareShuffledMCQ(m.mini.opts,m.mini.a,PAPER_SHUFFLE_ID+'|mini|'+m.id); }
-const MODULE_ANIMS = {
-  m1: [{id:'anim-cap', label:'CAP: CP vs AP vs CA'}],
-  m2: [{id:'anim-cap', label:'CAP: CP vs AP vs CA'}],
-  m3: [{id:'anim-doc', label:'Jerarquía DB → documento'}],
-  m4: [{id:'anim-crud', label:'CRUD'}],
-  m6: [{id:'anim-replica', label:'Replica set: oplog y failover'}],
-  m7: [{id:'anim-shard', label:'Sharding: chunks y mongos'}]
-};
+const MODULE_ANIMS = {};
 const QUIZ_MODULE_HINT = {
   'Taxonomía':'m0', 'CAP':'m1', 'NoSQL vs RDBMS':'m2', 'MongoDB':'m3', 'CRUD':'m4',
   'Índices':'m5', 'Aggregation':'m5', 'Replicación':'m6', 'Sharding':'m7'
@@ -1154,6 +1137,7 @@ function saveJSON(key, val){ try{ localStorage.setItem(key, JSON.stringify(val))
 
 function go(view, opts){
   opts = opts || {};
+  if (view === 'animaciones') view = 'aprende';
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   const elv = $('#view-'+view);
   if (!elv) return;
@@ -1165,7 +1149,6 @@ function go(view, opts){
   });
   if (!opts.keepScroll) window.scrollTo({top:0, behavior: opts.instant ? 'auto' : 'smooth'});
   if (view==='quiz' && !quiz.rendered) quiz.render();
-  if (view==='animaciones' && !animsRendered) initAnims();
   if (view==='quiz' && opts.panel) setQuizPanel(opts.panel);
   if (view==='animaciones' && opts.animId) {
     requestAnimationFrame(()=>{
@@ -1240,7 +1223,7 @@ function updateContinueCard(){
   } else if (lastView.view === 'quiz') {
     detail = '<strong>Quiz</strong> — modo ' + (lastView.mode||'estudio') + (quizWrong.length ? ' · ' + quizWrong.length + ' falladas guardadas' : '') + (quizScores.length ? ' · último ' + quizScores[quizScores.length-1] + '%' : '');
   } else if (lastView.view === 'animaciones') {
-    detail = '<strong>Animaciones</strong> — laboratorio visual';
+    detail = '<strong>Aprende</strong> — figuras junto al texto';
   } else if (lastView.view === 'glosario') {
     detail = '<strong>Glosario</strong>';
   } else if (lastView.view === 'cheatsheet') {
@@ -2095,5 +2078,7 @@ enhanceTips($('#cheatsheetContent'));
   else if (parts[0]==='cheatsheet') go('cheatsheet', {instant:true});
 })();
 </script>
+<script src="../assets/gsap.min.js"></script>
+<script src="../assets/learn-stage.js"></script>
 </body>
 </html>
