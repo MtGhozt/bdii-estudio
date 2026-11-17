@@ -423,7 +423,7 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
   <p class="lede">Tres pasos, en orden. Cada uno prepara el siguiente.</p>
   <ol class="path">
     <li><button class="path-step" onclick="go('aprende')"><span class="path-n">01</span><span><span class="path-t">Aprende</span><span class="path-d">10 módulos (m0–m9). Hover en términos del glosario.</span></span></button></li>
-    <li><button class="path-step" onclick="go('aprende')"><span class="path-n">02</span><span><span class="path-t">Figuras en Aprende</span><span class="path-d">Los esquemas y los flujos están junto al párrafo que los explica.</span></span></button></li>
+    <li><button class="path-step" onclick="go('animaciones')"><span class="path-n">02</span><span><span class="path-t">Animaciones</span><span class="path-d">CPU y RAM, arquitectura, lazy, shuffle, Catalyst y tokens.</span></span></button></li>
     <li><button class="path-step" onclick="go('quiz')"><span class="path-n">03</span><span><span class="path-t">Quiz y casos</span><span class="path-d">Preguntas del resumen, Colab y trampas de Learning Spark / Fundamentals, más casos.</span></span></button></li>
   </ol>
 </section>
@@ -497,7 +497,7 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
 </main>
 <footer>Herramienta de estudio sobre Apache Spark y PySpark (resumen DWH/Spark y notebook de Colab). Leer con las figuras → practicar.</footer>
 <script>
-const MODULES = [
+﻿const MODULES = [
 { id:'m0', tag:'Módulo 0', accent:'gold', title:'Recursos: CPU, RAM y los dos límites',
 summary:'Un solo núcleo por defecto, memoria para intermedios, y cuándo una máquina no alcanza.',
 html: `
@@ -561,6 +561,13 @@ html: `
 <tr><td><strong>client</strong></td><td>Driver en la máquina de quien lanza el trabajo (notebook, IDE).</td></tr>
 <tr><td><strong>cluster</strong></td><td>Driver dentro del clúster.</td></tr></table>
 <div class="callout tip"><div class="lbl">[didáctico]</div>Mnemotecnia: <strong>driver piensa, CM reparte, executor trabaja</strong>. Si el driver está en tu laptop (client) y cierras la sesión, el trabajo se queda sin coordinador.</div>
+<pre><code>         Driver (SparkSession, DAG, stages/tasks)
+              │
+   ┌──────────┼──────────┐
+   ▼          ▼          ▼
+Executor   Executor   Executor   ← tasks + cache
+              ▲
+       Cluster Manager (Standalone | YARN | K8s)</code></pre>
 <div class="trade"><b>Trade-off 3 · client vs cluster.</b> Ganas en client: ves logs y depuras desde el notebook. Pierdes: el driver compite con tu máquina y un corte de red tumba el job.</div>
 `,
 mini:{q:'¿Quién convierte el programa en un DAG?', opts:['Cada executor','El driver','El archivo Parquet','El Tokenizer'], a:1, why:'El driver planifica. Los executors ejecutan tasks.'} },
@@ -628,7 +635,43 @@ spark.sql("SELECT housing_median_age FROM Housing LIMIT 10").show()</code></pre>
 <tr><td>Hoy en PySpark</td><td>Legado</td><td><strong>La API a usar</strong></td><td>No es el camino Python</td></tr></table><div class="callout info"><div class="lbl">[resumen]</div>En Scala, <code>DataFrame = Dataset[Row]</code>. El Dataset tipado solo existe en Scala/Java. En PySpark el camino es el DataFrame.</div>
 <div class="callout warn"><div class="lbl">[clase/notebook]</div><strong>Quirk de tipos.</strong> Un ejemplo del notebook mezcla <code>IntegerType</code> en <code>total_rooms</code> con <code>DoubleType</code> en otras columnas. Si el header no calza, aparecen nulos raros. Mejor un esquema homogéneo (todo double en la lectura) y el cast explícito después, o <code>inferSchema=True</code> más un cast.</div>
 <div class="trade"><b>Trade-off 5 · inferSchema vs esquema declarado.</b> Ganas con inferir: una línea y a explorar. Pierdes: una pasada extra y tipos adivinados. En producción se declara.</div>
-<h3>Pipeline housing (corregido)</h3><pre><code>df_conv.repartition(4).write.mode(overwrite).parquet(output/housing_parquet)</code></pre>
+<h3>Pipeline housing (corregido)</h3>
+<div class="callout info"><div class="lbl">[clase/notebook]</div>Flujo completo del taller: schema homogéneo → cast a entero donde toca → columna <code>location</code> → SQL → <code>describe</code> → escritura Parquet.</div>
+<pre><code>from pyspark.sql import functions as F
+from pyspark.sql.types import StructType, StructField, DoubleType, IntegerType
+
+PATH = "./sample_data/california_housing_train.csv"
+schema = StructType([
+    StructField("longitude", DoubleType(), True),
+    StructField("latitude", DoubleType(), True),
+    StructField("housing_median_age", DoubleType(), True),
+    StructField("total_rooms", DoubleType(), True),
+    StructField("total_bedrooms", DoubleType(), True),
+    StructField("population", DoubleType(), True),
+    StructField("households", DoubleType(), True),
+    StructField("median_income", DoubleType(), True),
+    StructField("median_house_value", DoubleType(), True),
+])
+df = spark.read.csv(PATH, header=True, schema=schema)
+
+df_conv = df.select(
+    F.col("latitude"), F.col("longitude"),
+    F.col("housing_median_age").cast(IntegerType()).alias("housing_median_age"),
+    F.col("total_rooms").cast(IntegerType()).alias("total_rooms"),
+    F.col("total_bedrooms").cast(IntegerType()).alias("total_bedrooms"),
+    F.col("population").cast(IntegerType()).alias("population"),
+    F.col("households").cast(IntegerType()).alias("households"),
+    F.col("median_income"), F.col("median_house_value"),
+    F.struct("longitude", "latitude").alias("location"),
+)
+df_conv.createOrReplaceTempView("housing")
+spark.sql("""
+  SELECT housing_median_age, AVG(median_house_value) AS avg_value
+  FROM housing WHERE total_rooms &gt; 1000
+  GROUP BY housing_median_age ORDER BY housing_median_age DESC LIMIT 10
+""").show()
+df_conv.describe().show()
+(df_conv.repartition(4).write.mode("overwrite").parquet("output/housing_parquet"))</code></pre>
 `,
 mini:{q:'Una vista temporal creada con createOrReplaceTempView…', opts:['Queda publicada en el DWH','Vive solo en esa SparkSession','Escribe Parquet','Desactiva Catalyst'], a:1, why:'Misma sesión, mismo Catalyst que el API DataFrame. Al cerrar, desaparece.'} },
 { id:'m6', tag:'Módulo 6', accent:'gold', title:'Ejecución perezosa, map-reduce y acciones',
@@ -651,13 +694,28 @@ reduce(lambda x, y: x + y, map(lambda x: x**2, l))  # 338350</code></pre>
 <div class="callout info"><div class="lbl">[resumen]</div>La transformación alarga el plan. La acción lo ejecuta.</div>
 <table><tr><th>Transformaciones (lazy)</th><th>Acciones</th></tr>
 <tr><td><code>select</code>, <code>filter</code> / <code>where</code>, <code>withColumn</code>, <code>join</code>, <code>groupBy</code>, <code>distinct</code>, <code>flatMap</code>, <code>union</code></td><td><code>show</code>, <code>count</code>, <code>collect</code>, <code>take</code>, <code>first</code>, <code>reduce</code>, <code>saveAsTextFile</code>, <code>write</code></td></tr></table>
-<p><code>where</code> y <code>filter</code> son <strong>alias</strong>. <code>describe()</code> devuelve count, mean, stddev, min y max de las columnas numéricas: es una acción de perfilado. Un <code>groupBy</code> con agregación y clave distinta es una transformación <strong>wide</strong> (hay shuffle).</p>
+<h3>Conversión de tipos (map sobre columnas)</h3>
+<div class="callout info"><div class="lbl">[clase/notebook]</div>El “map” del taller es un <code>select</code> con <code>.cast</code> y a veces un <code>struct</code>. No hace falta un RDD para tipar columnas.</div>
+<pre><code>from pyspark.sql.types import IntegerType
+df_conversion = df.select(
+    "latitude", "longitude",
+    df.housing_median_age.cast(IntegerType()),
+    df.total_rooms.cast("int"),
+    F.struct("longitude", "latitude").alias("location"),
+)</code></pre>
+<h3>Filtros, describe y agregaciones</h3>
+<p><code>where</code> y <code>filter</code> son <strong>alias</strong>. <code>describe()</code> es una <strong>acción</strong> de perfilado: count, mean, stddev, min y max de columnas numéricas. Un <code>groupBy</code> con agregación y clave distinta es una transformación <strong>wide</strong> (hay shuffle).</p>
 <pre><code>df_conversion.select("median_income").where("total_rooms &gt; 5000").show()
 df_conversion.filter(F.col("total_rooms") &gt; 5000).count()
+df_conversion.where(F.col("location.longitude") &gt; -114.6).select("location").show()
+df_conversion.describe().show()
 (df_conversion.groupBy("housing_median_age")
     .agg(F.avg("median_house_value").alias("promedio_valor"),
          F.sum("median_income").alias("suma_ingreso"))
     .orderBy(F.desc("housing_median_age"))
+    .show())
+(df_conversion.groupBy("total_bedrooms")
+    .agg(F.avg("median_house_value"), F.sum("median_income"))
     .show())</code></pre>
 <div class="callout warn"><div class="lbl">[didáctico · Learning Spark]</div>Encadenar <code>filter</code>/<code>select</code> y hacer <code>print("listo")</code> <strong>sin acción</strong> no lee el archivo: solo alarga el plan. El error de ruta o de datos aparece en el <code>count</code>/<code>show</code>/<code>write</code>, no en la línea del filtro.</div>
 <div class="trade"><b>Trade-off 6 · Pereza.</b> Ganas: el motor ve el plan completo y tira trabajo inútil. Pierdes: el error de datos aparece en la acción, líneas después de donde escribiste el filtro.</div>
@@ -667,7 +725,7 @@ mini:{q:'¿Cuál de estas dispara la ejecución?', opts:['select','withColumn','
 summary:'Dónde está el shuffle, cómo se parten los jobs, y cuándo persistir.',
 html: `
 <p class="lede">El linaje permite rehacer una partición perdida. El shuffle es lo que parte ese grafo en stages y, de paso, lo que más cuesta.</p>
-<div class="callout info"><div class="lbl">[resumen]</div>Un RDD es <strong>resiliente</strong> (el linaje reconstruye cada partici, y por eso no hace falta replicar los datos);ón), <strong>distribuido</strong>, <strong>inmutable</strong> (cada transformación produce otro) y <strong>lazy</strong>. <strong>Narrow:</strong> una partición de salida depende de una de entrada (<code>map</code>, <code>filter</code>, <code>select</code>, <code>withColumn</code> simple): sin shuffle. <strong>Wide:</strong> la salida depende de muchas entradas (<code>groupBy</code>, <code>join</code>, <code>distinct</code>, <code>orderBy</code>, <code>repartition</code>): hay shuffle por red o disco.</div>
+<div class="callout info"><div class="lbl">[resumen]</div>Un RDD es <strong>resiliente</strong> (si se pierde una partición, el <strong>linaje</strong> la reconstruye; por eso no hace falta replicar los datos), <strong>distribuido</strong>, <strong>inmutable</strong> (cada transformación produce otro) y <strong>lazy</strong>. <strong>Narrow:</strong> una partición de salida depende de una de entrada (<code>map</code>, <code>filter</code>, <code>select</code>, <code>withColumn</code> simple): sin shuffle. <strong>Wide:</strong> la salida depende de muchas entradas (<code>groupBy</code>, <code>join</code>, <code>distinct</code>, <code>orderBy</code>, <code>repartition</code>): hay shuffle por red o disco.</div>
 <div class="callout tip"><div class="lbl">[didáctico]</div>Fórmula: <strong>1 acción = 1 job → N stages (cortados en cada shuffle) → M tasks (una por partición, en lo típico).</strong></div>
 <table><tr><th>Método</th><th>Particiones</th><th>Shuffle</th><th>Cuándo</th></tr>
 <tr><td><code>repartition(n)</code></td><td>Sube o baja</td><td>Sí</td><td>Balancear, o justo antes de una escritura pesada.</td></tr>
@@ -677,7 +735,11 @@ html: `
 df_join.repartition(10).write.mode("overwrite").parquet("ejemplo_escritura_1_parquet")
 df_cached = df_datetime.persist()  # MEMORY_AND_DISK
 df_cached.unpersist()</code></pre>
-<p><code>cache()</code> equivale a <code>persist(MEMORY_ONLY)</code>. <code>persist()</code> sin argumentos usa <code>MEMORY_AND_DISK</code>. Niveles: <code>MEMORY_ONLY</code>, <code>MEMORY_AND_DISK</code>, <code>DISK_ONLY</code>, entre otros. Tiene sentido cuando el mismo DataFrame alimenta varias ramas: limpieza de tweets, agregaciones y ML. Si no, Spark recomputa el linaje en cada acción.</p>
+<table><tr><th>Nivel</th><th>Qué guarda</th><th>Cuándo</th></tr>
+<tr><td><code>MEMORY_ONLY</code> (= <code>cache()</code>)</td><td>Solo RAM</td><td>Cabe holgado y se reusa varias veces.</td></tr>
+<tr><td><code>MEMORY_AND_DISK</code> (default de <code>persist()</code>)</td><td>RAM; el resto a disco</td><td>Recomputar es caro (limpieza de tweets, varias ramas).</td></tr>
+<tr><td><code>DISK_ONLY</code></td><td>Solo disco</td><td>RAM justa y el linaje es pesado.</td></tr></table>
+<p>Si no persistes y hay varias acciones, Spark recomputa el linaje cada vez. Al terminar: <code>unpersist()</code>.</p>
 <div class="callout info"><div class="lbl">[didáctico · Learning Spark]</div>En agregaciones por clave (RDD Pair o idea equivalente), preferí <code>reduceByKey</code> / <code>aggregate</code> con combine local frente a <code>groupByKey</code>+sumar: el primero reduce tráfico de red; el segundo manda listas crudas y puede OOM. Si particionas un dataset grande que reusas en varios joins, <code>repartition</code>/<code>partitionBy</code> + <code>persist</code>: sin persist, cada acción re-shufflea. Tras particionar, transformar solo el valor (<code>mapValues</code> en RDD) conserva el partitioner; un <code>map</code> genérico lo borra y el siguiente join vuelve a shufflear.</div>
 <div class="trade"><b>Trade-off 7 · Shuffle y caché.</b> Ganas con repartition: archivos balanceados. Pierdes: el movimiento de datos. Ganas con persist: no repites la limpieza. Pierdes: RAM (y disco, si el nivel lo permite) ocupada hasta el <code>unpersist</code>.</div>
 `,
@@ -687,11 +749,24 @@ summary:'Quién optimiza el plan, quién lo ejecuta, y por qué Parquet gana al 
 html: `
 <p class="lede">El DataFrame no se ejecuta "como lo escribiste". Catalyst lo reescribe, Tungsten lo corre apretado y AQE puede cambiar de opinión con los tamaños reales.</p>
 <table><tr><th>Motor</th><th>Qué hace</th></tr>
-<tr><td><strong>Catalyst</strong></td><td>Cadena: plan lógico -> plan lógico <strong>optimizado</strong> (predicate pushdown, column pruning) -> <strong>varios planes físicos</strong> -> elección por <strong>costos</strong> -> generación de código.</td></tr>ísico.</td></tr>
+<tr><td><strong>Catalyst</strong></td><td>Plan lógico → plan lógico <strong>optimizado</strong> (predicate pushdown, column pruning) → <strong>varios planes físicos</strong> → elección por <strong>costos</strong> → generación de código.</td></tr>
 <tr><td><strong>Tungsten</strong></td><td>Ejecución: memoria <strong>off-heap</strong>, formato binario compacto y <strong>whole-stage code generation</strong>.</td></tr>
 <tr><td><strong>AQE</strong></td><td>Reoptimiza <strong>en runtime</strong> con estadísticas reales (tamaño después del shuffle, otra estrategia de join).</td></tr></table>
 <div class="callout info"><div class="lbl">[resumen]</div>Si una tabla es pequeña, Spark puede <strong>difundirla</strong> a todos los executors y no shufflear la grande. El caso de libro es hechos unidos a una dimensión chica del modelo estrella.</div>
-<div class="callout info"><div class="lbl">[resumen]</div><strong>Variables compartidas:</strong> <em>broadcast variables</em> = variables de solo lectura enviadas una vez a cada nodo (no confundir con el broadcast join). <em>Accumulators</em> = variables a las que los executors solo suman (contadores); el driver las lee. El linaje del RDD permite recalcular una particion perdida: por eso no hace falta replicar los datos.</div>
+<div class="callout info"><div class="lbl">[resumen]</div><strong>Tres ideas distintas:</strong> (1) <em>broadcast join</em> = estrategia de join que copia la tabla chica; (2) <em>broadcast variable</em> = dato de solo lectura enviado una vez a cada nodo (lookup, diccionario); (3) <em>accumulator</em> = contador al que los executors solo suman y que el driver lee. No mezcles las tres.</div>
+<h3>Ejemplo del resumen (narrow → wide → acción)</h3>
+<pre><code>from pyspark.sql.functions import col, sum as _sum
+ventas = spark.read.parquet("s3://datos/ventas/")
+productos = spark.read.parquet("s3://datos/productos/")
+resultado = (ventas
+    .filter(col("anio") == 2025)                 # narrow
+    .join(productos, "producto_id")              # wide (o broadcast si es chica)
+    .groupBy("categoria")                        # wide → shuffle
+    .agg(_sum("monto").alias("total_ventas"))
+    .orderBy(col("total_ventas").desc()))
+resultado.show()                                 # ACCIÓN → se ejecuta todo
+ventas.createOrReplaceTempView("ventas")
+spark.sql("SELECT categoria, SUM(monto) FROM ventas GROUP BY categoria").show()</code></pre>
 <table><tr><th>Formato</th><th>Naturaleza</th><th>Notas</th></tr>
 <tr><td>CSV / JSON</td><td>Texto</td><td>Interoperables. El parseo es caro y los tipos son débiles.</td></tr>
 <tr><td><strong>Parquet</strong></td><td>Columnar comprimido</td><td>El preferido en Spark. Entra el predicate pushdown.</td></tr>
@@ -724,23 +799,47 @@ df_twitter.where(F.col("id").isNull()).count()  # filas corruptas</code></pre>
     .persist())</code></pre>
 <h3>Limpieza, tokens y tópicos</h3>
 <div class="callout tip"><div class="lbl">[didáctico]</div>La primera mención es <code>regexp_extract</code> del grupo 1 de <code>@usuario</code>. Para la nube de palabras hay que tokenizar <strong>text_clean</strong>, no el <code>text</code> crudo: el Tokenizer del notebook de ML apunta a <code>text</code>, y las líneas de <code>groupBy("token").count()</code> a veces vienen comentadas. Sin ese conteo, el dict de la nube no existe.</div>
-<pre><code>df_clean = (df
+<h3>Pipeline tweets (corregido)</h3>
+<div class="callout info"><div class="lbl">[clase/notebook]</div>Bloque reproducible: schema → top users → limpieza + <code>persist</code> → Tokenizer sobre <code>text_clean</code> → stops → explode → count. Archivo: <code>twitter_training.csv</code>.</div>
+<pre><code>from pyspark.sql import functions as F
+from pyspark.ml.feature import Tokenizer, StopWordsRemover
+
+PATH = "/content/twitter_training.csv"  # no traindata.csv
+schema = "id long, user string, sentiment string, text string"
+df = spark.read.csv(PATH, header=True, schema=schema)
+
+(df.groupBy("user").count().orderBy(F.desc("count")).limit(20).show(truncate=False))
+
+df_clean = (df
     .withColumn("text_clean", F.regexp_replace("text", r"https?://[^\s]+", ""))
     .withColumn("text_clean", F.regexp_replace("text_clean", r"@\w+", " "))
     .withColumn("text_clean", F.regexp_replace("text_clean", r"[^\w\s]", " "))
     .withColumn("text_clean", F.regexp_replace("text_clean", r"\s+", " "))
     .withColumn("text_clean", F.lower(F.trim("text_clean")))
-    .filter(F.length("text_clean") > 1)
+    .filter(F.length("text_clean") &gt; 1)
     .persist())
+
 tokenizer = Tokenizer(inputCol="text_clean", outputCol="tokens")
 stop = StopWordsRemover(inputCol="tokens", outputCol="filtered")
-word_counts = (stop.transform(tokenizer.transform(df_clean))
+tokens = tokenizer.transform(df_clean)
+filtered = stop.transform(tokens)
+word_counts = (filtered
     .select(F.explode("filtered").alias("token"))
-    .groupBy("token").count().orderBy(F.desc("count")))</code></pre>
-<p>Tópicos, en este orden: <strong>CountVectorizer</strong> (bolsa dispersa, <code>rawFeatures</code>) → <strong>IDF</strong> (pesa lo poco frecuente, <code>vectors</code>) → <strong>LDA</strong> (<code>k</code> temas, no supervisado) → <code>describeTopics</code>. La calidad depende de la limpieza y de <code>vocabSize</code>.</p>
-<pre><code>cv = CountVectorizer(inputCol="filtered", outputCol="rawFeatures", vocabSize=200, minDF=2)
+    .groupBy("token").count().orderBy(F.desc("count")))
+word_counts.show(20)
+# wc_sample = word_counts.limit(500).toPandas()  # WordCloud</code></pre>
+<h3>Topic modeling (corregido)</h3>
+<p>Orden fijo: <strong>CountVectorizer</strong> (<code>rawFeatures</code>) → <strong>IDF</strong> (<code>vectors</code>) → <strong>LDA</strong> (<code>k</code> temas) → <code>describeTopics</code>. La calidad depende de la limpieza y de <code>vocabSize</code>.</p>
+<pre><code>from pyspark.ml.feature import CountVectorizer, IDF
+from pyspark.ml.clustering import LDA
+
+cv = CountVectorizer(inputCol="filtered", outputCol="rawFeatures", vocabSize=200, minDF=2)
+feat = cv.fit(filtered).transform(filtered)
 idf = IDF(inputCol="rawFeatures", outputCol="vectors")
-lda = LDA(k=10, maxIter=10, featuresCol="vectors")</code></pre>
+rescaled = idf.fit(feat).transform(feat)
+lda = LDA(k=10, maxIter=10, featuresCol="vectors")
+lda_model = lda.fit(rescaled)
+lda_model.describeTopics(10).show(truncate=False)</code></pre>
 <h3>Puente con el DWH</h3>
 <div class="callout info"><div class="lbl">[resumen]</div>Spark hace el <strong>ETL/ELT</strong>: lee crudo del data lake (S3 o HDFS), limpia, agrega y escribe al DWH o a tablas curadas. En un <strong>lakehouse</strong> consulta Parquet, Delta o Iceberg con ACID. También arma hechos y dimensiones (Kimball) a partir de lo ya procesado. El ELT moderno carga crudo al lago y transforma con Spark o dbt en el destino. Snowflake, BigQuery o Redshift pueden ocupar partes del pipeline; Spark sigue siendo el motor de preparación.</div>
 <div class="callout tip"><div class="lbl">[Fundamentals]</div>Un lake sin catálogo ni capa ACID degenera en <em>data swamp</em>. Preferí Parquet (no CSV) para schema-on-read; evitá miles de archivos diminutos (un PUT por fila). Un MERGE/CDC fila a fila sobre columnar es Copy-on-Write caro: loteá. Lambda (batch+stream duplicados) solo si hace falta; Kappa unifica en un stream con replay.</div>
@@ -804,7 +903,14 @@ const QUIZ = [
 {tag:'Opt', c:'purple', q:'Un lago con CSV crudo + SELECT * pay-per-scan suele…', opts:['Aprovechar column pruning automáticamente','Romperse con cambios de esquema y disparar facturas altas','Dar ACID gratis','Ser el formato preferido de Catalyst'], a:1, why:'[Fundamentals] Schema-on-read con CSV es frágil; SELECT * anula pruning. Prefiere Parquet/particionado.'},
 {tag:'Opt', c:'purple', q:'Si Parquet anota en el pie "edad 18–35" y filtras edad > 50…', opts:['Spark descarga el bloque igual','Puede saltar el bloque sin leer los datos','Obliga un shuffle wide','Convierte el archivo a CSV'], a:1, why:'[quiz16] Stats del footer + predicate pushdown = block skipping.'},
 {tag:'DWH', c:'gold', q:'Carpetas /ventas/año=2026/mes=11/ en el lago sirven para…', opts:['Forzar un collect al driver','Que el WHERE por año/mes ignore el resto de carpetas','Reemplazar a Catalyst','Borrar Bronze cada noche'], a:1, why:'[quiz16] Partición física (Hive-style): menos archivos escaneados, menos costo.'},
-{tag:'DWH', c:'teal', q:'En el medallón, ¿quién limpia nulos y tipos hacia Parquet?', opts:['La capa Gold sola, sin motor','Silver, típicamente con Spark','Solo el POS','El cluster manager'], a:1, why:'[quiz16] Bronze aterriza; Silver limpia; Gold agrega para BI.'}
+{tag:'DWH', c:'teal', q:'En el medallón, ¿quién limpia nulos y tipos hacia Parquet?', opts:['La capa Gold sola, sin motor','Silver, típicamente con Spark','Solo el POS','El cluster manager'], a:1, why:'[quiz16] Bronze aterriza; Silver limpia; Gold agrega para BI.'},
+{tag:'Lazy', c:'gold', q:'describe() en un DataFrame…', opts:['Es una transformación lazy que no lee datos','Es una acción de perfilado (count, mean, stddev, min, max)','Solo funciona sobre RDD sin esquema','Equivale a explain(True)'], a:1, why:'Dispara ejecución y resume columnas numéricas. No es un plan vacío.'},
+{tag:'Opt', c:'purple', q:'Broadcast variable, accumulator y broadcast join…', opts:['Son tres nombres del mismo mecanismo','Son distintos: lookup solo lectura; contador sumable; estrategia de join','Solo existen en MapReduce','Reemplazan a Catalyst'], a:1, why:'Variable broadcast ≠ broadcast join. Accumulator solo suma hacia el driver.'},
+{tag:'Opt', c:'purple', q:'La cadena de Catalyst, en orden, es…', opts:['Código → AQE → Tungsten → disco','Plan lógico → lógico optimizado → planes físicos → costos → codegen','Solo pushdown sin plan físico','RDD → Dataset → CSV'], a:1, why:'Optimiza el lógico, elige físico por costo y genera código. Tungsten lo ejecuta.'},
+{tag:'DF', c:'pink', q:'En el pipeline housing corregido, lo sano es…', opts:['Mezclar IntegerType y DoubleType en el schema del CSV','Leer con schema homogéneo (doubles) y castear a entero después','Usar solo collect para tipar','Inferir y nunca castear'], a:1, why:'El CSV trae doubles. Cast post-lectura evita nulos raros por tipos mezclados.'},
+{tag:'Shuffle', c:'blue', q:'MEMORY_AND_DISK (default de persist) conviene cuando…', opts:['Nunca reusas el DataFrame','El linaje es caro (limpieza + varias ramas) y la RAM puede no alcanzar','Solo querés un print','Querés borrar el shuffle'], a:1, why:'Guarda en RAM y derrama a disco. Si no cabe MEMORY_ONLY, no recomputás todo.'},
+{tag:'Opt', c:'purple', q:'Tungsten aporta sobre todo…', opts:['Tokenizar tweets','Memoria off-heap, formato binario y whole-stage codegen','El modo client','inferSchema'], a:1, why:'Es la capa de ejecución compacta. Catalyst decide el plan; Tungsten lo corre.'},
+{tag:'Stack', c:'teal', q:'Structured Streaming trata el stream como…', opts:['Un CSV estático sin tiempo','Una tabla que crece, procesada en micro-batches','Solo GraphX','Un accumulator'], a:1, why:'Misma idea de DataFrame/SQL sobre datos que llegan en lotes pequeños.'}
 ];
 
 const CASES = [
@@ -817,7 +923,9 @@ const CASES = [
 { title:'Caso 7 · Hechos unidos a una dimensión chica', prompt:'Una tabla de hechos enorme se une a una dimensión de producto que cabe holgada en memoria. El plan muestra un shuffle de las dos. ¿Qué le pides a Spark y qué riesgo queda?', solution:'<strong>Broadcast</strong> de la dimensión: se copia a los executors y los hechos no viajan. Es el patrón estrella del resumen. El riesgo es declarar chica una tabla que no cabe: los executors se quedan sin memoria. AQE puede cambiar la estrategia al ver el tamaño real post-shuffle, pero no adivina si la dimensión ya no entra.', h1:'¿Qué optimizador reescribe el join?', h2:'¿Qué mide AQE que el plan inicial solo estima?', rubric:'Rúbrica: 2 broadcast + 2 hecho vs dimensión + 1 riesgo de memoria.'},
 { title:'Caso 8 · La limpieza corre tres veces', prompt:'df_clean alimenta el top de usuarios ya calculado aparte, luego la nube y luego el LDA, sin persist. Cada acción tarda como si releyera y reaplicara la regex. ¿Qué falta y cuándo lo sueltas?', solution:'<code>persist()</code> (default MEMORY_AND_DISK) después del filtro de limpieza, porque hay varias acciones sobre el mismo linaje. <code>cache()</code> sería solo memoria. Al terminar el ML, <code>unpersist()</code> para no dejar la copia ocupando el executor.', h1:'¿Cuántos jobs dispara cada acción?', h2:'¿Qué default tiene persist() sin argumentos?', rubric:'Rúbrica: 2 por qué se recomputa + 2 persist vs cache + 1 unpersist.'},
 { title:'Caso 9 · Suma por clave con groupByKey', prompt:'Tienes pares (producto_id, monto) de ~100 GB. Un compañero escribe groupByKey().mapValues(sum). La red se satura y un executor hace OOM en un producto popular. ¿Qué pedís en su lugar y por qué?', solution:'<strong>[Learning Spark] reduceByKey</strong> (o aggregate/combine con reduce local) suma dentro de cada partición antes del shuffle. groupByKey manda listas crudas y materializa todas las ventas de esa clave en un nodo. En DataFrame: <code>groupBy("producto_id").sum("monto")</code> ya va por Catalyst con agregación parcial. <strong>Trade-off:</strong> reduceByKey exige asociatividad; groupByKey es más general y más caro.', h1:'¿Qué es el map-side combine?', h2:'¿Cuál es el equivalente DataFrame?', rubric:'Rúbrica: 2 diagnóstico + 2 reduceByKey/DF + 1 trade-off.'},
-{ title:'Caso 10 · MERGE cada 5 s sobre Parquet', prompt:'Un CDC dispara MERGE sobre tablas Parquet en S3 cada pocos segundos. El pipeline se atrasa horas y el cómputo se dispara. ¿Qué está pasando físicamente y qué cambiás?', solution:'<strong>[Fundamentals] Copy-on-Write:</strong> actualizar pocas filas reescribe archivos columnares enteros. Agrupa el MERGE en micro-lotes (minutos), compacta y VACUUM/optimize. No trates Parquet como un heap fila-a-fila de Postgres. <strong>Trade-off:</strong> latencia de frescura vs. costo de reescritura.', h1:'¿Por qué Parquet es inmutable a nivel archivo?', h2:'¿Qué problema de "archivos pequeños" aparece si insertás 1 fila por PUT?', rubric:'Rúbrica: 2 COW + 2 loteo + 1 trade-off.'}
+{ title:'Caso 10 · MERGE cada 5 s sobre Parquet', prompt:'Un CDC dispara MERGE sobre tablas Parquet en S3 cada pocos segundos. El pipeline se atrasa horas y el cómputo se dispara. ¿Qué está pasando físicamente y qué cambiás?', solution:'<strong>[Fundamentals] Copy-on-Write:</strong> actualizar pocas filas reescribe archivos columnares enteros. Agrupa el MERGE en micro-lotes (minutos), compacta y VACUUM/optimize. No trates Parquet como un heap fila-a-fila de Postgres. <strong>Trade-off:</strong> latencia de frescura vs. costo de reescritura.', h1:'¿Por qué Parquet es inmutable a nivel archivo?', h2:'¿Qué problema de "archivos pequeños" aparece si insertás 1 fila por PUT?', rubric:'Rúbrica: 2 COW + 2 loteo + 1 trade-off.'},
+{ title:'Caso 11 · Contador vs diccionario vs join', prompt:'En un job querés (a) un mapa país→región de 2 KB en cada executor, (b) contar filas corruptas mientras leés, y (c) unir hechos a una dimensión de 50 MB. Un compañero propone “broadcast” para las tres. ¿Qué usás en cada una?', solution:'(a) <strong>Broadcast variable</strong>: lookup de solo lectura. (b) <strong>Accumulator</strong>: los executors solo suman; el driver lee el total. (c) <strong>Broadcast join</strong> de la dimensión (si cabe en cada executor). No son el mismo mecanismo: confundirlos en el examen es trampa típica del resumen.', h1:'¿Quién lee el accumulator?', h2:'¿Qué pasa si la “dimensión” de 50 MB en realidad pesa 5 GB?', rubric:'Rúbrica: 2 var vs join + 2 accumulator + 1 riesgo de memoria.'},
+{ title:'Caso 12 · Pipeline housing de cero', prompt:'Te piden reproducir el flujo housing sin abrir el markdown: leer CSV, tipar bien, SQL de promedio por edad, perfilar y escribir Parquet en 4 partes. Escribí el esqueleto mental.', solution:'Schema <strong>homogéneo double</strong> → <code>read.csv</code> → <code>select</code> con <code>cast(IntegerType)</code> + <code>struct(longitude,latitude).alias("location")</code> → <code>createOrReplaceTempView</code> + SQL (AVG por edad, filtro rooms) → <code>describe().show()</code> → <code>repartition(4).write.mode("overwrite").parquet(...)</code>. No mezcles Integer en el schema del CSV.', h1:'¿Por qué cast después y no en el StructType del CSV?', h2:'¿describe es transformación o acción?', rubric:'Rúbrica: 2 schema + 2 cast/SQL/describe + 1 write/repartition.'}
 ];
 
 const GLOSSARY = [
@@ -862,6 +970,12 @@ const GLOSSARY = [
 ['Tungsten','Ejecución eficiente: memoria off-heap y código generado. (resumen)'],
 ['AQE','Reoptimización en runtime con estadísticas reales. (resumen)'],
 ['Broadcast join','Copia una tabla pequeña a los executors para no shufflear la grande. (resumen)'],
+['Broadcast variable','Dato de solo lectura enviado una vez a cada nodo (lookup). No es el broadcast join. (resumen)'],
+['Accumulator','Contador al que los executors solo suman; el driver lo lee. (resumen)'],
+['describe','Acción de perfilado: count, mean, stddev, min, max de columnas numéricas. (notebook)'],
+['MEMORY_ONLY','Nivel de persist (= cache): solo RAM. Si no cabe, se pierde la partición y se recomputa. (resumen)'],
+['MEMORY_AND_DISK','Default de persist(): RAM y el resto a disco. Ideal si el linaje es caro. (notebook)'],
+['DISK_ONLY','Persist solo en disco: útil con RAM justa y recomputo muy caro. (resumen)'],
 ['Parquet','Formato columnar comprimido. El preferido para leer y escribir en Spark. (resumen)'],
 ['Delta Lake','Capa ACID y time travel sobre Parquet. Pieza de un lakehouse. (resumen)'],
 ['Medallón','Bronze crudo, Silver limpio (Spark), Gold curado para BI. (quiz16)'],
@@ -881,16 +995,15 @@ const GLOSSARY = [
 ];
 
 const CHEATSHEET = `
-<div class="card accent-gold"><h3 style="margin-top:0;">Recursos y modos</h3><p style="font-size:14px;">Un CPU por defecto en pandas/numpy. Límites: <strong>RAM</strong> (datos e intermedios) y <strong>tiempo</strong>. Paralelo = N núcleos. Distribuido = N máquinas. <code>local[*]</code> es una JVM, no un clúster.</p></div>
-<div class="card accent-purple"><h3 style="margin-top:0;">Spark vs MapReduce</h3><p style="font-size:14px;">Intermedios en <strong>memoria</strong>. Motor unificado: batch, SQL, streaming, ML, grafos. <strong>No es almacenamiento</strong>. Sobre Hadoop reemplaza el motor (YARN + HDFS), no todo el ecosistema.</p></div>
-<div class="card accent-teal"><h3 style="margin-top:0;">Arquitectura</h3><p style="font-size:14px;"><strong>Driver</strong> arma el DAG. <strong>Cluster manager</strong> asigna (Standalone, YARN, K8s). <strong>Executors</strong> corren tasks y cachean. Modos: local, client (driver en tu máquina), cluster (driver adentro).</p></div>
-<div class="card accent-orange"><h3 style="margin-top:0;">Regla de oro</h3><p style="font-size:14px;">Ejecución remota incluso en <code>local[*]</code>. Nada de bucles fila a fila. <code>collect</code> y <code>toPandas</code> solo para muestras. UDF más lenta que Spark SQL. Cerrar con <code>spark.stop()</code>. Java 21 alcanza en el Colab.</p></div>
-<div class="card accent-pink"><h3 style="margin-top:0;">DataFrame</h3><p style="font-size:14px;">Schema DDL o StructType evita la doble pasada. <code>F.col</code> en expresiones. Vista temporal = solo esta sesión, mismo Catalyst. RDD sin optimizar; Dataset tipado es Scala/Java.</p></div>
-<div class="card accent-gold"><h3 style="margin-top:0;">Lazy y shuffle</h3><p style="font-size:14px;"><strong>1 acción = 1 job → stages entre shuffles → tasks por partición.</strong> Narrow no mueve datos. Wide sí. <code>repartition</code> sube o baja con shuffle. <code>coalesce</code> solo baja. <code>persist()</code> = MEMORY_AND_DISK. <code>cache()</code> = MEMORY_ONLY.</p></div>
-<div class="card accent-purple"><h3 style="margin-top:0;">Optimización y archivos</h3><p style="font-size:14px;"><strong>Catalyst</strong> (pushdown, pruning) · <strong>Tungsten</strong> (off-heap, codegen) · <strong>AQE</strong> (stats reales). Broadcast si la dimensión cabe. Parquet columnar. Delta / Iceberg / Hudi = lakehouse.</p></div>
-<div class="card accent-teal"><h3 style="margin-top:0;">Tweets y DWH</h3><p style="font-size:14px;">Archivo <code>twitter_training.csv</code>. Schema explícito. Tokenizar <code>text_clean</code>. Tokenizer → stops → explode → count. Luego CountVectorizer → IDF → LDA. Puente: fuentes → Spark → lake/Delta → DWH, o ELT en el destino.</p></div>
+<div class="card accent-gold"><h3 style="margin-top:0;">Fundamentos</h3><p style="font-size:14px;">Spark &gt; MapReduce en iteraciones por <strong>memoria</strong>. Stack: Core, SQL, GraphX, SparkML/MLlib, Structured Streaming. Roles: <strong>driver</strong> (DAG), <strong>CM</strong> (YARN/K8s/Standalone), <strong>executors</strong>. Modos: local / client / cluster. <strong>No es BD ni almacén</strong>. Un CPU por defecto en pandas; límites RAM y tiempo.</p></div>
+<div class="card accent-blue"><h3 style="margin-top:0;">RDD, ejecución, rendimiento</h3><p style="font-size:14px;"><strong>Resiliente</strong> = linaje (no hace falta replicar). Transformaciones lazy vs acciones. Narrow vs wide; shuffle = frontera de stage. <strong>1 acción = 1 job → stages → tasks</strong>. <code>repartition</code> (shuffle) vs <code>coalesce</code> (solo baja). <code>cache</code>=MEMORY_ONLY; <code>persist</code>=MEMORY_AND_DISK; también DISK_ONLY. <code>unpersist</code> al terminar.</p></div>
+<div class="card accent-pink"><h3 style="margin-top:0;">APIs y optimización</h3><p style="font-size:14px;">RDD sin Catalyst; <strong>DataFrame</strong> en PySpark; Dataset tipado = Scala/Java. <strong>Catalyst</strong>: lógico → optimizado (pushdown, pruning) → físicos → costos → codegen. <strong>Tungsten</strong>: off-heap + whole-stage. <strong>AQE</strong>: stats reales. Broadcast join ≠ broadcast var ≠ accumulator.</p></div>
+<div class="card accent-purple"><h3 style="margin-top:0;">Formatos y arquitectura</h3><p style="font-size:14px;"><strong>Parquet</strong> (columnar, pushdown, block skipping) &gt; CSV. ORC (Hive), Avro (filas/streaming), Delta/Iceberg/Hudi (ACID, lakehouse). Spark en ETL/ELT, data lake, lakehouse y hacia el DWH. Medallón: Bronze → Silver (Spark) → Gold.</p></div>
+<div class="card accent-orange"><h3 style="margin-top:0;">PySpark práctico</h3><p style="font-size:14px;">Regla de oro: ejecución remota. <code>SparkSession</code> + <code>stop()</code>. Schema string/StructType; cast post-lectura; <code>F.col</code>/alias; filter=where; temp view + SQL; <code>explain</code>; <code>describe</code>; <code>groupBy</code>+<code>agg</code>; write + repartition. Housing: doubles → cast → struct location → Parquet. Tweets: schema, regex, Tokenizer(<code>text_clean</code>), CV→IDF→LDA.</p></div>
+<div class="card accent-teal"><h3 style="margin-top:0;">Quirks (trampas)</h3><p style="font-size:14px;">Java 8 apt 404 → <strong>JAVA_HOME 21</strong> funciona. Archivo real: <code>twitter_training.csv</code> (no traindata). Celdas “Escriba aquí” con solución abajo. Schema housing mezclado → nulos. Tokenizer sobre <code>text</code> crudo rompe la nube. Sin <code>groupBy(token).count()</code> no hay WordCloud.</p></div>
 `;
 
+/* ---- Glossary tip bubbles ---- */
 const $ = s => document.querySelector(s);
 function enhanceTips(){}
 const PAPER_SHUFFLE_ID = 'spark';
@@ -899,7 +1012,1484 @@ function seededRandom(seed){ let s=seed>>>0; return ()=>{ s=(Math.imul(s,1664525
 function prepareShuffledMCQ(opts,correctIndex,seedKey){ const indices=opts.map((_,i)=>i); const rand=seededRandom(hashSeedStr(seedKey)); for(let i=indices.length-1;i>0;i--){ const j=Math.floor(rand()*(i+1)); [indices[i],indices[j]]=[indices[j],indices[i]]; } return { opts:indices.map(ix=>opts[ix]), a:indices.indexOf(correctIndex) }; }
 function shuffledQuizItem(qi){ const q=QUIZ[qi]; return prepareShuffledMCQ(q.opts,q.a,PAPER_SHUFFLE_ID+'|quiz|'+qi); }
 function shuffledMini(m){ return prepareShuffledMCQ(m.mini.opts,m.mini.a,PAPER_SHUFFLE_ID+'|mini|'+m.id); }
-const MODULE_ANIMS = {};
+const MODULE_ANIMS = {
+  m0: [{id:'anim-cpu', label:'CPU, RAM y límites'}],
+  m1: [{id:'anim-cpu', label:'Un CPU vs muchos núcleos'}],
+  m3: [{id:'anim-arch', label:'Driver, executors, CM'}],
+  m6: [{id:'anim-lazy', label:'Lazy: plan y acción'}],
+  m7: [{id:'anim-shuffle', label:'Narrow, wide y shuffle'}],
+  m8: [{id:'anim-pipeline', label:'Catalyst, AQE, Parquet'}],
+  m9: [{id:'anim-tokens', label:'Tweets, tokens y LDA'}]
+};
+const QUIZ_MODULE_HINT = {
+  'CPU':'m0', 'Paralelo':'m1', 'Spark':'m2', 'Stack':'m3',
+  'Sesion':'m4', 'Quirk':'m4', 'DF':'m5', 'Lazy':'m6',
+  'Shuffle':'m7', 'Opt':'m8', 'Texto':'m9', 'DWH':'m9'
+};
+
+function loadJSON(key, fallback){
+  try { const v = JSON.parse(localStorage.getItem(key) || ''); return v == null ? fallback : v; }
+  catch(e){ return fallback; }
+}
+function saveJSON(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
+
+function go(view, opts){
+  opts = opts || {};
+  if (view === 'animaciones') view = 'aprende';
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  const elv = $('#view-'+view);
+  if (!elv) return;
+  elv.classList.add('active');
+  document.querySelectorAll('.tab').forEach(t=>{
+    const on = t.dataset.view===view;
+    t.classList.toggle('active', on);
+    t.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  if (!opts.keepScroll) window.scrollTo({top:0, behavior: opts.instant ? 'auto' : 'smooth'});
+  if (view==='quiz' && !quiz.rendered) quiz.render();
+  if (view==='quiz' && opts.panel) setQuizPanel(opts.panel);
+  if (view==='animaciones' && opts.animId) {
+    requestAnimationFrame(()=>{
+      const target = document.getElementById(opts.animId);
+      if (target) target.scrollIntoView({behavior:'smooth', block:'start'});
+    });
+  }
+  if (view==='glosario' && opts.term) {
+    const inp = $('#glossarySearch');
+    if (inp) { inp.value = opts.term; renderGlossary(opts.term); }
+  }
+  saveLastView(view);
+  updateProgress();
+  updateContinueCard();
+}
+function goModule(moduleId, opts){
+  opts = opts || {};
+  const idx = MODULES.findIndex(m=>m.id===moduleId);
+  if (idx < 0) { go('aprende'); return; }
+  currentModule = idx;
+  saveLastView('aprende');
+  go('aprende', {instant: !!opts.instant});
+  renderModuleNav();
+  renderModule();
+  if (opts.sectionId) {
+    requestAnimationFrame(()=>{
+      const t = document.getElementById(opts.sectionId);
+      if (t) t.scrollIntoView({behavior:'smooth', block:'start'});
+    });
+  }
+}
+function goAnim(animId){ go('animaciones', {animId: animId}); }
+
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click', ()=>go(t.dataset.view)));
+(function(){ const bar=document.getElementById('tabs'); const sync=()=>document.querySelectorAll('.tab').forEach(t=>t.setAttribute('aria-selected', t.classList.contains('active')?'true':'false')); bar.addEventListener('click', ()=>setTimeout(sync,0)); bar.addEventListener('keydown', e=>{ if(e.key!=='ArrowRight'&&e.key!=='ArrowLeft') return; const ts=[...bar.querySelectorAll('.tab')]; let i=ts.indexOf(document.activeElement); if(i<0) return; e.preventDefault(); i=(i+(e.key==='ArrowRight'?1:-1)+ts.length)%ts.length; ts[i].focus(); go(ts[i].dataset.view); sync(); }); sync(); })();
+const themeBtn = $('#themeBtn');
+themeBtn.addEventListener('click', ()=>{ document.body.classList.toggle('light'); const mode=document.body.classList.contains('light')?'light':'dark'; themeBtn.textContent=mode==='light'?'Claro':'Oscuro'; try{localStorage.setItem('spark-theme',mode); localStorage.setItem('bdii-hub-theme',mode);}catch(e){} if(typeof refreshAnimColors==='function') refreshAnimColors(); });
+(function(){ let s=null; try{s=localStorage.getItem('spark-theme')||localStorage.getItem('bdii-hub-theme');}catch(e){} if(s==='light'){ document.body.classList.add('light'); themeBtn.textContent='Claro'; } })();
+
+let done = loadJSON('spark-done', {});
+let miniAnswers = loadJSON('spark-mini', {});
+let quizScores = (function(){ const a=loadJSON('spark-quiz', []); return Array.isArray(a)?a:[]; })();
+let quizWrong = (function(){ const a=loadJSON('spark-quiz-wrong', []); return Array.isArray(a)?a.map(Number):[]; })();
+let caseProgress = loadJSON('spark-cases', {});
+let lastView = loadJSON('spark-last', null);
+
+function saveMiniAnswer(moduleId, choiceIndex){ miniAnswers[moduleId]=choiceIndex; saveJSON('spark-mini', miniAnswers); updateProgress(); }
+function applyMiniAnswer(m, mo, choiceIndex, correctA){ [...mo.children].forEach(x=>x.disabled=true); const ex=$('#miniExplain'); const b=mo.children[choiceIndex]; if(choiceIndex===correctA){ b.classList.add('correct'); ex.innerHTML='<span class="why">✓ Correcto.</span> '+m.mini.why; } else { b.classList.add('wrong'); mo.children[correctA].classList.add('correct'); ex.innerHTML='<span style="color:var(--bad); font-weight:700;">✗ Incorrecto.</span> '+m.mini.why; } ex.classList.add('show'); enhanceTips(ex); }
+function revealMiniAnswer(m, mo, choiceIndex, correctA){ if(miniAnswers[m.id]!==undefined) return; saveMiniAnswer(m.id, choiceIndex); applyMiniAnswer(m, mo, choiceIndex, correctA); }
+
+function saveLastView(view){
+  lastView = {
+    view: view,
+    module: currentModule,
+    panel: quiz.panel || 'quiz',
+    mode: quiz.mode || 'study',
+    filter: quiz.filter || 'all',
+    pageSize: quiz.pageSize === 'all' ? 'all' : quiz.pageSize,
+    page: quiz.page || 0
+  };
+  saveJSON('spark-last', lastView);
+}
+function updateContinueCard(){
+  const card = $('#continueCard');
+  if (!card) return;
+  if (!lastView || !lastView.view || lastView.view === 'inicio') { card.hidden = true; return; }
+  const doneN = MODULES.filter(m=>done[m.id]).length;
+  let detail = '';
+  if (lastView.view === 'aprende') {
+    const m = MODULES[lastView.module|0] || MODULES[0];
+    detail = '<strong>Aprende · ' + m.tag + '</strong> — ' + m.title + ' · ' + doneN + '/' + MODULES.length + ' completados';
+  } else if (lastView.view === 'quiz') {
+    detail = '<strong>Quiz</strong> — modo ' + (lastView.mode||'estudio') + (quizWrong.length ? ' · ' + quizWrong.length + ' falladas guardadas' : '') + (quizScores.length ? ' · último ' + quizScores[quizScores.length-1] + '%' : '');
+  } else if (lastView.view === 'animaciones') {
+    detail = '<strong>Aprende</strong> — figuras junto al texto';
+  } else if (lastView.view === 'glosario') {
+    detail = '<strong>Glosario</strong>';
+  } else if (lastView.view === 'cheatsheet') {
+    detail = '<strong>Cheatsheet</strong> — repaso rápido';
+  } else {
+    detail = '<strong>' + lastView.view + '</strong>';
+  }
+  $('#continueDetail').innerHTML = detail;
+  card.hidden = false;
+}
+function resumeStudy(){
+  if (!lastView || !lastView.view) { go('aprende'); return; }
+  if (lastView.view === 'aprende') {
+    currentModule = Math.min(Math.max(0, lastView.module|0), MODULES.length-1);
+    go('aprende', {instant:true});
+    renderModuleNav(); renderModule();
+    return;
+  }
+  if (lastView.view === 'quiz') {
+    quiz.mode = lastView.mode || 'study';
+    quiz.filter = lastView.filter || 'all';
+    quiz.pageSize = lastView.pageSize === 'all' ? 'all' : (parseInt(lastView.pageSize,10)||5);
+    quiz.page = lastView.page|0;
+    quiz.panel = lastView.panel || 'quiz';
+    go('quiz', {panel: quiz.panel, instant:true});
+    quiz.syncToolbar();
+    quiz.render();
+    return;
+  }
+  go(lastView.view, {instant:true});
+}
+
+function updateProgress(){
+  const total = MODULES.length;
+  const finished = MODULES.filter(m=>done[m.id]).length;
+  const miniN = MODULES.filter(m=>miniAnswers[m.id]!==undefined).length;
+  $('#progressFill').style.width = Math.round((finished/total)*100) + '%';
+  const label = $('#progressLabel');
+  if (label) label.innerHTML = 'Módulos <b>'+finished+'/'+total+'</b> · Mini-checks <b>'+miniN+'/'+total+'</b>';
+  const hint = $('#progressQuizHint');
+  if (hint) {
+    const last = quizScores.length ? quizScores[quizScores.length-1] + '%' : '—';
+    const wrongN = quizWrong.length;
+    hint.innerHTML = 'Último quiz <b>'+last+'</b>' + (wrongN ? ' · Falladas <b>'+wrongN+'</b>' : '');
+  }
+  const track = document.querySelector('.progress-track');
+  if (track) track.title = finished+'/'+total+' módulos · '+miniN+' mini-checks · último quiz '+(quizScores.length?quizScores[quizScores.length-1]+'%':'sin intentos');
+}
+function markDone(id){ done[id]=true; saveJSON('spark-done', done); renderModuleNav(); updateProgress(); saveLastView('aprende'); }
+function unmarkDone(id){ delete done[id]; saveJSON('spark-done', done); renderModuleNav(); updateProgress(); saveLastView('aprende'); }
+
+let currentModule = (lastView && typeof lastView.module === 'number') ? lastView.module : 0;
+if (currentModule < 0 || currentModule >= MODULES.length) currentModule = 0;
+
+function slugify(s){
+  return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,48);
+}
+function buildModuleOutline(root){
+  const headings = [...root.querySelectorAll('h3, .trade')];
+  if (headings.length < 2) return null;
+  const nav = document.createElement('nav');
+  nav.className = 'module-outline';
+  nav.setAttribute('aria-label', 'Secciones del módulo');
+  headings.forEach((h,i)=>{
+    let label = h.tagName === 'H3' ? h.textContent.trim() : (h.querySelector('b') ? h.querySelector('b').textContent.trim() : ('Trade-off '+(i+1)));
+    if (label.length > 42) label = label.slice(0,40) + '…';
+    if (!h.id) h.id = 'sec-' + MODULES[currentModule].id + '-' + i + '-' + slugify(label);
+    const a = document.createElement('a');
+    a.href = '#' + h.id;
+    a.textContent = label;
+    a.addEventListener('click', function(ev){
+      ev.preventDefault();
+      h.scrollIntoView({behavior:'smooth', block:'start'});
+    });
+    nav.appendChild(a);
+  });
+  return nav;
+}
+
+function renderModuleNav(){
+  const nav=$('#moduleNav'); nav.innerHTML='';
+  MODULES.forEach((m,i)=>{
+    const b=document.createElement('button');
+    b.className='module-link'+(i===currentModule?' active':'')+(done[m.id]?' done':'');
+    b.innerHTML='<span class="idx">'+String(i).padStart(2,'0')+'</span><span>'+m.title+'</span>'+(done[m.id]?'<span class="check">✓</span>':'');
+    b.onclick=()=>{ currentModule=i; saveLastView('aprende'); renderModuleNav(); renderModule(); window.scrollTo({top:0,behavior:'smooth'}); };
+    nav.appendChild(b);
+  });
+  const active = nav.querySelector('.module-link.active');
+  if (active && nav.scrollWidth > nav.clientWidth) {
+    active.scrollIntoView({inline:'center', block:'nearest', behavior:'smooth'});
+  }
+}
+
+function renderModule(){
+  const m=MODULES[currentModule];
+  const c=$('#moduleContent');
+  const reading = c.classList.contains('reading-mode');
+  const anims = MODULE_ANIMS[m.id] || [];
+  const animBtns = anims.map(a=>'<button type="button" class="btn ghost small" onclick="goAnim(\''+a.id+'\')">Ver animación · '+a.label+'</button>').join('');
+  c.innerHTML =
+    '<div class="module-chip">Módulo '+(currentModule+1)+' / '+MODULES.length+(done[m.id]?' · completado':'')+'</div>'+
+    '<span class="kicker" style="color:var(--'+m.accent+');">'+m.tag+'</span>'+
+    '<h2>'+m.title+'</h2>'+
+    '<p class="lede">'+m.summary+'</p>'+
+    '<div class="done-banner" style="'+(done[m.id]?'display:flex;':'display:none;')+'">✓ Módulo completado</div>'+
+    '<div id="moduleBody">'+m.html+'</div>'+
+    (animBtns ? '<div class="controls" style="margin-top:18px;">'+animBtns+'</div>' : '')+
+    '<div class="card accent-'+m.accent+'" style="margin-top:26px;"><div class="kicker" style="color:var(--'+m.accent+');">Mini-check rápido</div><p style="font-weight:600; color:var(--text); margin:8px 0;">'+m.mini.q+'</p><div id="miniOpts"></div><div class="explain" id="miniExplain"></div></div>'+
+    '<div class="module-pager">'+
+      '<button class="btn ghost" id="prevBtn"'+(currentModule===0?' disabled style="opacity:.4;cursor:default;"':'')+'>← Anterior</button>'+
+      '<button class="btn ghost small" id="readModeBtn" type="button">'+(reading?'Salir modo lectura':'Modo lectura')+'</button>'+
+      '<button class="btn '+(done[m.id]?'ghost':'teal')+'" id="doneBtn">'+(done[m.id]?'Desmarcar':'✓ Marcar como completado')+'</button>'+
+      '<button class="btn" id="nextBtn"'+(currentModule===MODULES.length-1?' disabled style="opacity:.4;cursor:default;"':'')+'>Siguiente →</button>'+
+    '</div>';
+  if (reading) c.classList.add('reading-mode'); else c.classList.remove('reading-mode');
+  const body = $('#moduleBody');
+  const outline = buildModuleOutline(body);
+  if (outline) c.insertBefore(outline, body);
+  const sm=shuffledMini(m);
+  enhanceTips(c);
+  const mo=$('#miniOpts');
+  sm.opts.forEach((opt,i)=>{ const b=document.createElement('button'); b.className='opt'; b.textContent=opt; b.onclick=()=>revealMiniAnswer(m,mo,i,sm.a); mo.appendChild(b); });
+  if(miniAnswers[m.id]!==undefined) applyMiniAnswer(m,mo,miniAnswers[m.id],sm.a);
+  $('#prevBtn').onclick=()=>{ if(currentModule>0){ currentModule--; saveLastView('aprende'); renderModuleNav(); renderModule(); window.scrollTo({top:0,behavior:'smooth'}); } };
+  $('#nextBtn').onclick=()=>{ if(currentModule<MODULES.length-1){ currentModule++; saveLastView('aprende'); renderModuleNav(); renderModule(); window.scrollTo({top:0,behavior:'smooth'}); } };
+  $('#doneBtn').onclick=()=>{ if(done[m.id]){ unmarkDone(m.id); } else { markDone(m.id); } renderModule(); };
+  $('#readModeBtn').onclick=()=>{ c.classList.toggle('reading-mode'); $('#readModeBtn').textContent = c.classList.contains('reading-mode') ? 'Salir modo lectura' : 'Modo lectura'; };
+}
+
+function setQuizPanel(panel){
+  quiz.panel = panel === 'cases' ? 'cases' : 'quiz';
+  $('#quizPanel').classList.toggle('active', quiz.panel==='quiz');
+  $('#casesPanel').classList.toggle('active', quiz.panel==='cases');
+  $('#tabQuizPanel').classList.toggle('active', quiz.panel==='quiz');
+  $('#tabCasesPanel').classList.toggle('active', quiz.panel==='cases');
+  saveLastView('quiz');
+}
+$('#tabQuizPanel').addEventListener('click', ()=>setQuizPanel('quiz'));
+$('#tabCasesPanel').addEventListener('click', ()=>setQuizPanel('cases'));
+
+const quiz = {
+  rendered:false, answers:{}, mode:'study', filter:'all', pageSize:'all', page:0, panel:'quiz',
+  tags(){ return [...new Set(QUIZ.map(q=>q.tag))]; },
+  activeIndices(){
+    let idxs = QUIZ.map((_,i)=>i);
+    if (this.filter !== 'all') idxs = idxs.filter(i => QUIZ[i].tag === this.filter);
+    if (this.mode === 'wrong') {
+      const set = new Set(quizWrong);
+      idxs = idxs.filter(i => set.has(i));
+    }
+    return idxs;
+  },
+  pageSlice(indices){
+    if (this.pageSize === 'all') return { slice: indices, pages: 1 };
+    const size = this.pageSize|0;
+    const pages = Math.max(1, Math.ceil(indices.length / size));
+    if (this.page >= pages) this.page = pages - 1;
+    if (this.page < 0) this.page = 0;
+    const start = this.page * size;
+    return { slice: indices.slice(start, start + size), pages };
+  },
+  syncToolbar(){
+    document.querySelectorAll('#quizModes .btn').forEach(b=>b.classList.toggle('seg-on', b.dataset.mode===this.mode));
+    document.querySelectorAll('#quizPageCtl .btn').forEach(b=>{
+      const v = b.dataset.page;
+      const on = (v==='all' && this.pageSize==='all') || (v!=='all' && String(this.pageSize)===v);
+      b.classList.toggle('seg-on', on);
+    });
+    const filt = $('#quizFilters');
+    filt.innerHTML = '';
+    const allBtn = document.createElement('button');
+    allBtn.type='button'; allBtn.className='btn ghost small'+(this.filter==='all'?' seg-on':'');
+    allBtn.textContent='Todas';
+    allBtn.onclick=()=>{ this.filter='all'; this.page=0; this.render(); };
+    filt.appendChild(allBtn);
+    this.tags().forEach(tag=>{
+      const b=document.createElement('button');
+      b.type='button'; b.className='btn ghost small'+(this.filter===tag?' seg-on':'');
+      b.textContent=tag;
+      b.onclick=()=>{ this.filter=tag; this.page=0; this.render(); };
+      filt.appendChild(b);
+    });
+  },
+  renderMap(indices){
+    const nav = $('#quizNav');
+    const map = $('#quizMap');
+    const showNav = this.pageSize !== 'all' || indices.length > 8;
+    nav.hidden = !showNav;
+    map.innerHTML = '';
+    if (this.pageSize === 'all') {
+      indices.forEach((qi, pos)=>{
+        const b=document.createElement('button');
+        b.type='button'; b.textContent=String(qi+1);
+        if (this.answers[qi]!==undefined) {
+          const ok = this.answers[qi]===shuffledQuizItem(qi).a;
+          b.classList.add(this.mode==='exam' && !this._examFinished ? 'answered' : (ok?'correct':'wrong'));
+        }
+        b.onclick=()=>{ const el=$('#q'+qi); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); };
+        map.appendChild(b);
+      });
+      $('#quizPrev').onclick=()=>{ window.scrollBy({top:-window.innerHeight*0.7, behavior:'smooth'}); };
+      $('#quizNext').onclick=()=>{ window.scrollBy({top:window.innerHeight*0.7, behavior:'smooth'}); };
+    } else {
+      const size = this.pageSize|0;
+      const pages = Math.max(1, Math.ceil(indices.length / size));
+      for (let p=0;p<pages;p++){
+        const b=document.createElement('button');
+        b.type='button'; b.textContent=String(p+1);
+        if (p===this.page) b.classList.add('current');
+        const pageIdxs = indices.slice(p*size, p*size+size);
+        if (pageIdxs.every(qi=>this.answers[qi]!==undefined)) b.classList.add('answered');
+        b.onclick=()=>{ this.page=p; this.render(); window.scrollTo({top:0,behavior:'smooth'}); };
+        map.appendChild(b);
+      }
+      $('#quizPrev').onclick=()=>{ if(this.page>0){ this.page--; this.render(); window.scrollTo({top:0,behavior:'smooth'}); } };
+      $('#quizNext').onclick=()=>{ const pages=Math.max(1, Math.ceil(indices.length/size)); if(this.page<pages-1){ this.page++; this.render(); window.scrollTo({top:0,behavior:'smooth'}); } };
+    }
+  },
+  render(){
+    this.rendered=true;
+    this._examFinished=false;
+    this.syncToolbar();
+    const indices = this.activeIndices();
+    const c=$('#quizContainer'); c.innerHTML='';
+    $('#quizResult').classList.remove('show');
+    $('#quizRemediation').innerHTML='';
+    if (!indices.length) {
+      c.innerHTML = '<div class="card"><p style="margin:0;">No hay preguntas en este filtro'+(this.mode==='wrong'?' (aún no hay falladas guardadas — haz un intento en Estudio o Examen).':'')+'.</p></div>';
+      this.refreshChip();
+      this.renderMap([]);
+      saveLastView('quiz');
+      return;
+    }
+    const {slice} = this.pageSlice(indices);
+    slice.forEach((qi, localI)=>{
+      const q=QUIZ[qi];
+      const sq=shuffledQuizItem(qi);
+      const card=document.createElement('div');
+      card.className='question-card';
+      card.id='q'+qi;
+      const posLabel = (this.pageSize==='all' ? (indices.indexOf(qi)+1) : (this.page*(this.pageSize|0)+localI+1));
+      card.innerHTML='<div class="qmeta"><span class="qtag" style="background:var(--'+q.c+'-soft); color:var(--'+q.c+');">'+q.tag+'</span><span style="color:var(--dim); font-size:13px;">Pregunta '+posLabel+' · #'+(qi+1)+' · pool '+indices.length+'</span></div><div class="qtext">'+q.q+'</div><div class="opts"></div><div class="explain"></div>';
+      const box=card.querySelector('.opts');
+      sq.opts.forEach((opt,oi)=>{
+        const b=document.createElement('button');
+        b.className='opt'; b.innerHTML=opt;
+        b.onclick=()=>this.answer(qi,oi);
+        box.appendChild(b);
+      });
+      c.appendChild(card);
+      if (this.answers[qi]!==undefined) this.applyAnswerUI(qi, this.answers[qi], true);
+    });
+    enhanceTips(c);
+    this.refreshChip();
+    this.renderMap(indices);
+    saveLastView('quiz');
+  },
+  applyAnswerUI(qi, oi, restore){
+    const sq=shuffledQuizItem(qi);
+    const q=QUIZ[qi];
+    const card=$('#q'+qi);
+    if (!card) return;
+    const showFeedback = this.mode !== 'exam' || this._examFinished;
+    card.querySelectorAll('.opt').forEach((b,i)=>{
+      b.disabled = true;
+      if (showFeedback) {
+        if (i===sq.a) b.classList.add('correct');
+        if (i===oi && oi!==sq.a) b.classList.add('wrong');
+      } else {
+        if (i===oi) b.style.borderColor = 'var(--blue)';
+      }
+    });
+    const ex=card.querySelector('.explain');
+    if (showFeedback) {
+      ex.innerHTML='<span class="why">'+(oi===sq.a?'✓ Correcto':'✗ Incorrecto')+'.</span> '+q.why;
+      ex.classList.add('show');
+      enhanceTips(ex);
+    } else {
+      ex.classList.remove('show');
+      ex.innerHTML='';
+    }
+  },
+  answer(qi,oi){
+    if (this.answers[qi]!==undefined) return;
+    this.answers[qi]=oi;
+    const sq=shuffledQuizItem(qi);
+    const ok = oi===sq.a;
+    if (!ok) {
+      if (!quizWrong.includes(qi)) quizWrong.push(qi);
+    } else {
+      quizWrong = quizWrong.filter(x=>x!==qi);
+    }
+    saveJSON('spark-quiz-wrong', quizWrong);
+    this.applyAnswerUI(qi, oi, false);
+    this.refreshChip();
+    const indices = this.activeIndices();
+    const answeredAll = indices.length && indices.every(i=>this.answers[i]!==undefined);
+    if (answeredAll) this.finish();
+    else this.renderMap(indices);
+    updateProgress();
+    saveLastView('quiz');
+  },
+  refreshChip(){
+    const indices = this.activeIndices();
+    const n = indices.filter(i=>this.answers[i]!==undefined).length;
+    const ok = indices.filter(i=>this.answers[i]!==undefined && this.answers[i]===shuffledQuizItem(i).a).length;
+    $('#scoreChip').textContent = ok+' / '+n+' correctas · mostrando '+indices.length+(this.mode==='exam'?' · examen':'');
+  },
+  finish(){
+    const indices = this.activeIndices();
+    const ok = indices.filter(i=>this.answers[i]===shuffledQuizItem(i).a).length;
+    const pct = indices.length ? Math.round(ok/indices.length*100) : 0;
+    this._examFinished = true;
+    if (this.mode === 'exam') {
+      indices.forEach(qi=>{ if (this.answers[qi]!==undefined) this.applyAnswerUI(qi, this.answers[qi], false); });
+    }
+    const wrongNow = indices.filter(i=>this.answers[i]!==shuffledQuizItem(i).a);
+    const r=$('#quizResult'); r.classList.add('show');
+    $('#quizPercent').textContent=pct+'%';
+    $('#gradeFill').style.width=pct+'%';
+    let msg;
+    if(pct===100) msg='Perfecto: Dominas Apache Spark y sus trade-offs.';
+    else if(pct>=80) msg='Muy bien. Abajo tienes las falladas con salto directo.';
+    else if(pct>=60) msg='Vas bien. Relee los módulos enlazados y rehaz Solo falladas.';
+    else msg='Vuelve a Aprende: citas + trade-offs, luego reintenta en modo Examen.';
+    $('#quizMsg').textContent=msg;
+    const rem = $('#quizRemediation');
+    if (wrongNow.length) {
+      rem.innerHTML = '<p style="margin:0 0 8px;"><strong>Falladas ('+wrongNow.length+'):</strong></p>' +
+        wrongNow.map(qi=>{
+          const tag = QUIZ[qi].tag;
+          const mid = QUIZ_MODULE_HINT[tag] || 'm5';
+          return '<a href="#q'+qi+'" onclick="event.preventDefault(); const el=document.getElementById(\'q'+qi+'\'); if(el) el.scrollIntoView({behavior:\'smooth\'});">#'+(qi+1)+' '+tag+'</a>' +
+            ' <button type="button" class="linklike" style="padding:0;font-size:12.5px;" onclick="goModule(\''+mid+'\')">→ '+mid+'</button>';
+        }).join('<br>');
+      const btn = document.createElement('button');
+      btn.type='button'; btn.className='btn teal small'; btn.style.marginTop='12px';
+      btn.textContent='Rehacer '+wrongNow.length+' falladas';
+      btn.onclick=()=>{ this.mode='wrong'; this.filter='all'; this.page=0; this.answers={}; this.render(); window.scrollTo({top:0,behavior:'smooth'}); };
+      rem.appendChild(document.createElement('br'));
+      rem.appendChild(btn);
+    } else {
+      rem.innerHTML = '';
+    }
+    r.scrollIntoView({behavior:'smooth'});
+    quizScores.push(pct);
+    if(quizScores.length>20) quizScores=quizScores.slice(-20);
+    saveJSON('spark-quiz', quizScores);
+    updateProgress();
+  },
+  reset(){
+    this.answers={}; this.rendered=false; this.page=0; this._examFinished=false;
+    $('#quizResult').classList.remove('show');
+    $('#quizRemediation').innerHTML='';
+    $('#scoreChip').textContent='0 / 0 correctas';
+    this.render();
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+};
+
+document.querySelectorAll('#quizModes .btn').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    quiz.mode = b.dataset.mode;
+    quiz.answers = {};
+    quiz.page = 0;
+    quiz.render();
+  });
+});
+document.querySelectorAll('#quizPageCtl .btn').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    quiz.pageSize = b.dataset.page === 'all' ? 'all' : parseInt(b.dataset.page,10);
+    quiz.page = 0;
+    quiz.render();
+  });
+});
+
+function renderCases(){
+  const c=$('#casesContainer'); c.innerHTML='';
+  CASES.forEach((cs,i)=>{
+    const st = caseProgress[i] || {};
+    const card=document.createElement('div');
+    card.className='case-card';
+    card.id='case'+i;
+    card.innerHTML='<div class="qmeta"><span class="qtag" style="background:var(--teal-soft); color:var(--teal);">Caso '+(i+1)+'</span></div><h3 style="margin-top:4px;">'+cs.title+'</h3><div class="case-step">'+cs.prompt+'</div><div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;"><button class="btn ghost small hint-btn" '+(st.h1?'style="display:none"':'')+'>Pista 1</button><button class="btn ghost small hint-btn" '+(st.h2?'style="display:none"':'')+'>Pista 2</button></div><div class="explain hint-ex'+(st.h1||st.h2?' show':'')+'">'+(st.h2?'<span class="why">Pista 2:</span> '+cs.h2:st.h1?'<span class="why">Pista 1:</span> '+cs.h1:'')+'</div><button class="btn teal small reveal-btn" style="margin-top:8px;'+(st.sol?'display:none;':'')+'">Ver solución</button><div class="explain sol-ex'+(st.sol?' show':'')+'" style="margin-top:12px;">'+(st.sol?'<span class="why">Solución:</span> '+cs.solution+'<br><br><span class="why"> '+(cs.rubric||'')+'</span>':'')+'</div>';
+    const hex=card.querySelector('.hint-ex');
+    const hbtns=card.querySelectorAll('.hint-btn');
+    hbtns[0].onclick=()=>{ hex.innerHTML='<span class="why">Pista 1:</span> '+cs.h1; hex.classList.add('show'); hbtns[0].style.display='none'; caseProgress[i]=Object.assign({},caseProgress[i],{h1:true}); saveJSON('spark-cases', caseProgress); };
+    hbtns[1].onclick=()=>{ hex.innerHTML='<span class="why">Pista 2:</span> '+cs.h2; hex.classList.add('show'); hbtns[1].style.display='none'; caseProgress[i]=Object.assign({},caseProgress[i],{h2:true}); saveJSON('spark-cases', caseProgress); };
+    const ex=card.querySelector('.sol-ex');
+    const btn=card.querySelector('.reveal-btn');
+    btn.onclick=()=>{ ex.innerHTML='<span class="why">Solución:</span> '+cs.solution+'<br><br><span class="why"> '+(cs.rubric||'Rúbrica (5pts): 2 decisión + 2 mecanismo + 1 trade-off.')+'</span>'; ex.classList.add('show'); btn.style.display='none'; caseProgress[i]=Object.assign({},caseProgress[i],{sol:true}); saveJSON('spark-cases', caseProgress); enhanceTips(ex); };
+    c.appendChild(card);
+  });
+  enhanceTips(c);
+}
+
+function renderGlossary(filter){
+  filter=filter||'';
+  const list=$('#glossaryList'); list.innerHTML='';
+  const f=filter.toLowerCase();
+  GLOSSARY.filter(function(td){ return td[0].toLowerCase().includes(f)||td[1].toLowerCase().includes(f); }).forEach(function(td){
+    const div=document.createElement('div');
+    div.className='gloss-term';
+    div.innerHTML='<h3><code>'+td[0]+'</code></h3><div class="def">'+td[1]+'</div>';
+    list.appendChild(div);
+  });
+  if(!list.children.length){ list.innerHTML='<p>Sin resultados.</p>'; }
+}
+$('#glossarySearch').addEventListener('input', function(e){ renderGlossary(e.target.value); });
+$('#cheatsheetContent').innerHTML = CHEATSHEET;
+$('#continueBtn').addEventListener('click', resumeStudy);
+
+let animsRendered = false;
+function initAnims(){ if(animsRendered) return; animsRendered=true; animCpu.init(); animArch.init(); animLazy.init(); animShuffle.init(); animPipeline.init(); animTokens.init(); }
+
+function el(tag, attrs){ const e=document.createElementNS('http://www.w3.org/2000/svg',tag); for(const k in attrs) e.setAttribute(k, attrs[k]); return e; }
+const NODE={w:132,h:44,rx:10};
+let cBlue,cTeal,cOrange,cPurple,cGold,cDim,cBg,cBad;
+function refreshAnimColors(){
+  const cs=getComputedStyle(document.body);
+  const g=k=>(cs.getPropertyValue(k)||'').trim();
+  cBlue=g('--blue')||'#8ba3c7';
+  cTeal=g('--teal')||'#6fae9d';
+  cOrange=g('--orange')||'#c08d5c';
+  cPurple=g('--purple')||'#9d8ab8';
+  cGold=g('--gold')||'#c2a05e';
+  cDim=g('--dim')||'#6f6a61';
+  cBg=g('--surface')||'#1b1917';
+  cBad=g('--bad')||'#c07f8c';
+}
+refreshAnimColors();
+function nodeBox(x,y,label,fill,stroke){ const g=el('g',{}); g.appendChild(el('rect',{x:x-NODE.w/2,y:y-NODE.h/2,width:NODE.w,height:NODE.h,rx:NODE.rx,fill:fill,'fill-opacity':0.16,stroke:stroke,'stroke-width':1.2})); const t=el('text',{x:x,y:y+4,'text-anchor':'middle',class:'tnode'}); t.textContent=label; g.append(t); return g; }
+function arrow(g,x1,y1,x2,y2,color,label){ g.appendChild(el('path',{d:'M '+x1+' '+y1+' C '+((x1+x2)/2)+' '+y1+', '+((x1+x2)/2)+' '+y2+', '+x2+' '+y2,fill:'none',stroke:color,'stroke-width':1.6})); if(label){ const l=el('text',{x:(x1+x2)/2,y:(y1+y2)/2-6,'text-anchor':'middle',class:'tedge'}); l.textContent=label; g.append(l); } }
+function svgDefs(svg){ /* Study-desk: sin glow */ }
+function animChrome(svgId, total, idleNarr){
+  const svg=document.getElementById(svgId);
+  const card=svg.closest('.card');
+  const bar=document.createElement('div'); bar.className='anim-status';
+  bar.innerHTML='<span class="status-badge">\u25CF Listo</span><div class="anim-progress"><div class="anim-progress-fill"></div></div><span class="step-counter">0/'+total+'</span>';
+  const nar=document.createElement('div'); nar.className='narrator'; nar.innerHTML=idleNarr;
+  const controls=card.querySelector('.controls');
+  controls.after(bar); bar.after(nar);
+  return {card:card, badge:bar.children[0], fill:bar.querySelector('.anim-progress-fill'), counter:bar.querySelector('.step-counter'), nar:nar};
+}
+function animSetUI(ch, playBtn, state, idx, total, narrHTML, capEl, capHTML){
+  ch.fill.style.width=Math.round(idx/total*100)+'%';
+  ch.counter.textContent=idx+'/'+total;
+  if(narrHTML!=null) ch.nar.innerHTML=narrHTML;
+  if(capEl&&capHTML!=null) capEl.innerHTML=capHTML;
+  ch.badge.classList.remove('playing','paused','done');
+  if(playBtn) playBtn.classList.remove('playing');
+  if(state==='playing'){ ch.badge.textContent='\u25B6 Reproduciendo\u2026'; ch.badge.classList.add('playing'); if(playBtn){ playBtn.innerHTML='\u23F8 Pausar'; playBtn.classList.add('playing'); } }
+  else if(state==='paused'){ ch.badge.textContent='\u23F8 Pausado \u2014 pulsa para continuar'; ch.badge.classList.add('paused'); if(playBtn) playBtn.innerHTML='\u25B6 Continuar'; }
+  else if(state==='done'){ ch.badge.textContent='\u2713 Completado'; ch.badge.classList.add('done'); if(playBtn) playBtn.innerHTML='\u21BA Repetir'; }
+  else { ch.badge.textContent='\u25CF Listo'; if(playBtn&&playBtn._idleLabel) playBtn.innerHTML=playBtn._idleLabel; }
+}
+function svgCap(svg, text, y){
+  const old=svg.querySelector('.svgcap'); if(old) old.remove();
+  if(!text) return;
+  const t=el('text',{x:360,y:y,'text-anchor':'middle',class:'svgcap'}); t.textContent=text; svg.append(t);
+}
+function glowIdx(svg, idxs){
+  const gs=svg.querySelectorAll('g');
+  gs.forEach(function(g){
+    g.querySelectorAll('rect,circle,path,line').forEach(function(n){
+      if(n.hasAttribute('data-prev-sw')){ n.setAttribute('stroke-width', n.getAttribute('data-prev-sw')); n.removeAttribute('data-prev-sw'); }
+    });
+  });
+  idxs.forEach(function(i){
+    if(!gs[i]) return;
+    gs[i].querySelectorAll('rect,circle').forEach(function(n){
+      const prev=n.getAttribute('stroke-width')||'1.2';
+      n.setAttribute('data-prev-sw', prev);
+      n.setAttribute('stroke-width','2.4');
+    });
+  });
+}
+function flowOn(svg, on){
+  svg.querySelectorAll('path').forEach(function(p){ const d=p.getAttribute('d')||''; if(d.length<30) return; if(on) p.classList.add('flow'); else p.classList.remove('flow'); });
+}
+const animCpu = { idx:0, timer:null, playing:false,
+steps:[
+  '<b>Paso 1/4 · Un solo CPU.</b> R y Python, por defecto, usan <strong>un núcleo</strong> aunque la máquina tenga más. El taller lo muestra con pandas (housing) y numpy 800×800.',
+  '<b>Paso 2/4 · RAM.</b> Capacidad de procesamiento (CPU/GPU) y de memoria: la RAM guarda datos e <strong>intermedios</strong>. Si el dataset no cabe, el cómputo se frena.',
+  '<b>Paso 3/4 · Tiempo.</b> El otro límite es la latencia: hay cargas que piden respuesta casi en tiempo real y un solo hilo no llega.',
+  '<b>Paso 4/4 · Escalar.</b> Spark (y el MPP de un DWH) atacan el mismo problema: muchas filas y consultas pesadas, repartidas en núcleos y, en clúster, en máquinas. ✓'
+],
+titles:['1/4 un CPU','2/4 RAM','3/4 tiempo','4/4 escalar ✓'],
+init(){ this.svg=$('#svgGraph'); svgDefs(this.svg);
+  this.ch=animChrome('svgGraph',4,'Pulsa <b>Reproducir</b>: CPU, RAM y límites.');
+  this.playBtn=document.querySelector('[onclick="animCpu.play()"]'); this.playBtn._idleLabel=this.playBtn.innerHTML;
+  this.cap=$('#graphCaption'); this.draw();
+  animSetUI(this.ch,this.playBtn,'idle',0,4,null,this.cap,'Pulsa "Siguiente paso" o "Reproducir".'); },
+draw(){ const s=this.svg; s.innerHTML=''; svgDefs(s);
+  s.appendChild(nodeBox(160,90,'pandas / numpy',cGold,cGold));
+  s.appendChild(nodeBox(400,90,this.idx>=1?'RAM llena':'1 CPU',this.idx>=1?cOrange:cDim,this.idx>=1?cOrange:cDim));
+  s.appendChild(nodeBox(160,210,'disco',cPurple,cPurple));
+  s.appendChild(nodeBox(520,210,'Spark / MPP',cTeal,cTeal));
+  arrow(s,226,90,334,90,cGold,this.idx>=1?'presión':'1 hilo');
+  arrow(s,400,112,190,188,cPurple,this.idx>=1?'a disco':'');
+  arrow(s,466,112,500,188,cTeal,this.idx>=3?'reparte':'');
+  const t=el('text',{x:360,y:300,'text-anchor':'middle',class:'tedge'});
+  t.textContent=this.idx>=3?'muchas filas: paralelismo y clúster':'por defecto: un solo núcleo';
+  s.append(t);
+},
+advance(manual){ if(this.idx>=this.steps.length) return;
+  const st=this.steps[this.idx]; this.draw();
+  animSetUI(this.ch,this.playBtn,(this.playing&&!manual)?'playing':'paused',this.idx+1,4,st,this.cap,st);
+  glowIdx(this.svg,[[0,1],[1,2],[1],[3]][this.idx]); svgCap(this.svg,this.titles[this.idx],330); flowOn(this.svg,this.playing&&!manual);
+  this.idx++; if(this.idx>=this.steps.length) this.finish(); },
+play(){ if(this.playing){ this.pause(); return; } if(this.idx>=this.steps.length) this.reset();
+  this.playing=true; animSetUI(this.ch,this.playBtn,'playing',this.idx,4); flowOn(this.svg,true);
+  const self=this; this.timer=setInterval(function(){ self.advance(false); },1500); },
+pause(){ this.playing=false; if(this.timer) clearInterval(this.timer); this.timer=null; flowOn(this.svg,false); animSetUI(this.ch,this.playBtn,'paused',this.idx,4); },
+step(){ if(this.playing) this.pause(); this.advance(true); },
+finish(){ if(this.timer) clearInterval(this.timer); this.timer=null; this.playing=false; flowOn(this.svg,false);
+  animSetUI(this.ch,this.playBtn,'done',4,4,'<b>✓ Recursos.</b> Un CPU por defecto; los límites son RAM y tiempo. Spark reparte el trabajo.',this.cap,'CPU, RAM y límites ✓'); },
+reset(){ if(this.timer) clearInterval(this.timer); this.timer=null; this.playing=false; this.idx=0; this.draw(); animSetUI(this.ch,this.playBtn,'idle',0,4,'Pulsa <b>Reproducir</b>: CPU, RAM y límites.',this.cap,'Pulsa "Siguiente paso" o "Reproducir".'); } };
+
+const animArch = { idx:0, timer:null, playing:false,
+steps:[
+  '<b>Paso 1/5 · Driver.</b> Proceso principal: crea la <strong>SparkSession</strong>, arma el <strong>DAG</strong> y parte el trabajo en stages y tasks.',
+  '<b>Paso 2/5 · Cluster manager.</b> Asigna recursos. Standalone, YARN o Kubernetes (Mesos está deprecado).',
+  '<b>Paso 3/5 · Executors.</b> Corren las tasks, guardan <strong>cache</strong> local y reportan al driver.',
+  '<b>Paso 4/5 · local.</b> <code>local[*]</code> mete todo en una JVM: un hilo por núcleo. Sirve para el taller, no es un clúster.',
+  '<b>Paso 5/5 · client vs cluster.</b> En <strong>client</strong> el driver vive en tu notebook. En <strong>cluster</strong> el driver vive dentro del clúster. ✓'
+],
+titles:['1/5 driver','2/5 CM','3/5 executors','4/5 local[*]','5/5 deploy ✓'],
+init(){ this.svg=$('#svgCheck'); svgDefs(this.svg);
+  this.ch=animChrome('svgCheck',5,'Pulsa <b>Reproducir</b>: driver, executors y modos.');
+  this.playBtn=document.querySelector('[onclick="animArch.play()"]'); this.playBtn._idleLabel=this.playBtn.innerHTML;
+  this.cap=$('#checkCaption'); this.draw();
+  animSetUI(this.ch,this.playBtn,'idle',0,5,null,this.cap,'Pulsa "Siguiente paso" o "Reproducir".'); },
+draw(){ const s=this.svg; s.innerHTML=''; svgDefs(s);
+  const driverLbl=this.idx>=4?'driver (en clúster)':'Driver';
+  s.appendChild(nodeBox(360,48,this.idx===3?'local[*] JVM':driverLbl,cBlue,cBlue));
+  s.appendChild(nodeBox(360,160,'Cluster mgr',cOrange,cOrange));
+  s.appendChild(nodeBox(140,270,'Executor',cTeal,cTeal));
+  s.appendChild(nodeBox(360,270,'Executor',cTeal,cTeal));
+  s.appendChild(nodeBox(580,270,'Executor',cTeal,cTeal));
+  arrow(s,360,70,360,138,cOrange,'recursos');
+  arrow(s,300,182,170,248,cTeal,'tasks');
+  arrow(s,360,182,360,248,cTeal,'tasks');
+  arrow(s,420,182,550,248,cTeal,'tasks');
+},
+advance(manual){ if(this.idx>=this.steps.length) return;
+  const st=this.steps[this.idx]; this.draw();
+  animSetUI(this.ch,this.playBtn,(this.playing&&!manual)?'playing':'paused',this.idx+1,5,st,this.cap,st);
+  glowIdx(this.svg,[[0],[1],[2,3,4],[0],[0,1]][this.idx]); svgCap(this.svg,this.titles[this.idx],340); flowOn(this.svg,this.playing&&!manual);
+  this.idx++; if(this.idx>=this.steps.length) this.finish(); },
+play(){ if(this.playing){ this.pause(); return; } if(this.idx>=this.steps.length) this.reset();
+  this.playing=true; animSetUI(this.ch,this.playBtn,'playing',this.idx,5); flowOn(this.svg,true);
+  const self=this; this.timer=setInterval(function(){ self.advance(false); },1500); },
+pause(){ this.playing=false; if(this.timer) clearInterval(this.timer); this.timer=null; flowOn(this.svg,false); animSetUI(this.ch,this.playBtn,'paused',this.idx,5); },
+step(){ if(this.playing) this.pause(); this.advance(true); },
+finish(){ if(this.timer) clearInterval(this.timer); this.timer=null; this.playing=false; flowOn(this.svg,false);
+  animSetUI(this.ch,this.playBtn,'done',5,5,'<b>✓ Arquitectura.</b> Driver coordina, el CM asigna, los executors ejecutan y cachean.',this.cap,'Driver, executors, CM ✓'); },
+reset(){ if(this.timer) clearInterval(this.timer); this.timer=null; this.playing=false; this.idx=0; this.draw(); animSetUI(this.ch,this.playBtn,'idle',0,5,'Pulsa <b>Reproducir</b>: driver, executors y modos.',this.cap,'Pulsa "Siguiente paso" o "Reproducir".'); } };
+
+const animLazy = { idx:0, timer:null, playing:false,
+steps:[
+  '<b>Paso 1/4 · Transformación.</b> <code>select</code>, <code>filter</code>, <code>withColumn</code> no lanzan el cómputo: agregan un nodo al plan.',
+  '<b>Paso 2/4 · Plan completo.</b> Spark espera para fusionar proyecciones, empujar filtros y evitar trabajo de más.',
+  '<b>Paso 3/4 · explain.</b> <code>explain()</code> muestra el plan físico. <code>explain(True)</code> agrega lógico, optimizado y físico. Aún no es el resultado.',
+  '<b>Paso 4/4 · Acción.</b> <code>show</code>, <code>count</code>, <code>collect</code>, <code>write</code> disparan un <strong>job</strong>. ✓'
+],
+titles:['1/4 transform','2/4 plan','3/4 explain','4/4 acción ✓'],
+init(){ this.svg=$('#svgEnemy'); svgDefs(this.svg);
+  this.ch=animChrome('svgEnemy',4,'Pulsa <b>Reproducir</b>: lazy y acciones.');
+  this.playBtn=document.querySelector('[onclick="animLazy.play()"]'); this.playBtn._idleLabel=this.playBtn.innerHTML;
+  this.cap=$('#enemyCaption'); this.draw();
+  animSetUI(this.ch,this.playBtn,'idle',0,4,null,this.cap,'Pulsa "Siguiente paso" o "Reproducir".'); },
+draw(){ const s=this.svg; s.innerHTML=''; svgDefs(s);
+  s.appendChild(nodeBox(140,130,'select',cBlue,cBlue));
+  s.appendChild(nodeBox(320,130,'filter',cPurple,cPurple));
+  s.appendChild(nodeBox(500,130,'plan DAG',cGold,cGold));
+  s.appendChild(nodeBox(500,250,this.idx>=3?'JOB':'acción',cBad,cBad));
+  arrow(s,206,130,254,130,cPurple,'lazy');
+  arrow(s,386,130,434,130,cGold,'lazy');
+  arrow(s,500,152,500,228,cOrange,'dispara');
+  const t=el('text',{x:220,y:250,'text-anchor':'middle',class:'tedge'});
+  t.textContent=this.idx>=3?'la acción materializa el plan':'nada corre todavía';
+  s.append(t);
+},
+advance(manual){ if(this.idx>=this.steps.length) return;
+  const st=this.steps[this.idx]; this.draw();
+  animSetUI(this.ch,this.playBtn,(this.playing&&!manual)?'playing':'paused',this.idx+1,4,st,this.cap,st);
+  glowIdx(this.svg,[[0],[0,1,2],[2],[3]][this.idx]); svgCap(this.svg,this.titles[this.idx],320); flowOn(this.svg,this.playing&&!manual);
+  this.idx++; if(this.idx>=this.steps.length) this.finish(); },
+play(){ if(this.playing){ this.pause(); return; } if(this.idx>=this.steps.length) this.reset();
+  this.playing=true; animSetUI(this.ch,this.playBtn,'playing',this.idx,4); flowOn(this.svg,true);
+  const self=this; this.timer=setInterval(function(){ self.advance(false); },1500); },
+pause(){ this.playing=false; if(this.timer) clearInterval(this.timer); this.timer=null; flowOn(this.svg,false); animSetUI(this.ch,this.playBtn,'paused',this.idx,4); },
+step(){ if(this.playing) this.pause(); this.advance(true); },
+finish(){ if(this.timer) clearInterval(this.timer); this.timer=null; this.playing=false; flowOn(this.svg,false);
+  animSetUI(this.ch,this.playBtn,'done',4,4,'<b>✓ Lazy.</b> Las transformaciones arman el plan. Solo la acción lo ejecuta.',this.cap,'Transformaciones y acciones ✓'); },
+reset(){ if(this.timer) clearInterval(this.timer); this.timer=null; this.playing=false; this.idx=0; this.draw(); animSetUI(this.ch,this.playBtn,'idle',0,4,'Pulsa <b>Reproducir</b>: lazy y acciones.',this.cap,'Pulsa "Siguiente paso" o "Reproducir".'); } };
+
+const animShuffle = { idx:0, timer:null, playing:false,
+steps:[
+  '<b>Paso 1/5 · Narrow.</b> <code>map</code>, <code>filter</code>, <code>select</code>: una partición de salida depende de <strong>una</strong> de entrada. No hay shuffle.',
+  '<b>Paso 2/5 · Wide.</b> <code>groupBy</code>, <code>join</code>, <code>distinct</code>, <code>orderBy</code>, <code>repartition</code> mezclan particiones por red o disco.',
+  '<b>Paso 3/5 · Stages.</b> <strong>1 acción = 1 job</strong>. El scheduler corta <strong>stages</strong> en cada frontera de shuffle. Cada stage lanza <strong>tasks</strong> (una por partición, en lo típico).',
+  '<b>Paso 4/5 · repartition vs coalesce.</b> <code>repartition(n)</code> sube o baja <em>con</em> shuffle. <code>coalesce(n)</code> solo baja, sin shuffle completo.',
+  '<b>Paso 5/5 · cache / persist.</b> Si el mismo DataFrame alimenta varias acciones (limpieza + conteos + ML), <code>persist()</code> evita recomputar. <code>unpersist()</code> suelta la copia. ✓'
+],
+titles:['1/5 narrow','2/5 wide','3/5 stages','4/5 repartition','5/5 cache ✓'],
+init(){ this.svg=$('#svgZookie'); svgDefs(this.svg);
+  this.ch=animChrome('svgZookie',5,'Pulsa <b>Reproducir</b>: narrow, wide y shuffle.');
+  this.playBtn=document.querySelector('[onclick="animShuffle.play()"]'); this.playBtn._idleLabel=this.playBtn.innerHTML;
+  this.cap=$('#zookieCaption'); this.draw();
+  animSetUI(this.ch,this.playBtn,'idle',0,5,null,this.cap,'Pulsa "Siguiente paso" o "Reproducir".'); },
+draw(){ const s=this.svg; s.innerHTML=''; svgDefs(s);
+  s.appendChild(nodeBox(150,100,'P1 filter',cTeal,cTeal));
+  s.appendChild(nodeBox(150,210,'P2 filter',cTeal,cTeal));
+  s.appendChild(nodeBox(400,155,this.idx>=1?'SHUFFLE':'sin red',this.idx>=1?cOrange:cDim,this.idx>=1?cOrange:cDim));
+  s.appendChild(nodeBox(580,100,'stage B',cBlue,cBlue));
+  s.appendChild(nodeBox(580,210,'cache',cPurple,cPurple));
+  arrow(s,216,110,334,145,cDim,'narrow');
+  arrow(s,216,200,334,170,this.idx>=1?cOrange:cDim,'wide');
+  arrow(s,466,140,514,110,cBlue,'tasks');
+  const t=el('text',{x:360,y:300,'text-anchor':'middle',class:'tedge'});
+  t.textContent='1 acción = 1 job → stages entre shuffles → tasks';
+  s.append(t);
+},
+advance(manual){ if(this.idx>=this.steps.length) return;
+  const st=this.steps[this.idx]; this.draw();
+  animSetUI(this.ch,this.playBtn,(this.playing&&!manual)?'playing':'paused',this.idx+1,5,st,this.cap,st);
+  glowIdx(this.svg,[[0,1],[2],[2,3],[2],[4]][this.idx]); svgCap(this.svg,this.titles[this.idx],330); flowOn(this.svg,this.playing&&!manual);
+  this.idx++; if(this.idx>=this.steps.length) this.finish(); },
+play(){ if(this.playing){ this.pause(); return; } if(this.idx>=this.steps.length) this.reset();
+  this.playing=true; animSetUI(this.ch,this.playBtn,'playing',this.idx,5); flowOn(this.svg,true);
+  const self=this; this.timer=setInterval(function(){ self.advance(false); },1500); },
+pause(){ this.playing=false; if(this.timer) clearInterval(this.timer); this.timer=null; flowOn(this.svg,false); animSetUI(this.ch,this.playBtn,'paused',this.idx,5); },
+step(){ if(this.playing) this.pause(); this.advance(true); },
+finish(){ if(this.timer) clearInterval(this.timer); this.timer=null; this.playing=false; flowOn(this.svg,false);
+  animSetUI(this.ch,this.playBtn,'done',5,5,'<b>✓ Shuffle.</b> Narrow no mueve datos. Wide sí, y parte el job en stages. Cache si reutilizas el plan.',this.cap,'Narrow, wide, stages ✓'); },
+reset(){ if(this.timer) clearInterval(this.timer); this.timer=null; this.playing=false; this.idx=0; this.draw(); animSetUI(this.ch,this.playBtn,'idle',0,5,'Pulsa <b>Reproducir</b>: narrow, wide y shuffle.',this.cap,'Pulsa "Siguiente paso" o "Reproducir".'); } };
+
+const animPipeline = { idx:0, timer:null, playing:false,
+steps:[
+  '<b>Paso 1/5 · Plan lógico.</b> El DataFrame o el SQL se vuelve un plan. DataFrame y Dataset pasan por Catalyst; el RDD no.',
+  '<b>Paso 2/5 · Catalyst.</b> Reglas: <strong>predicate pushdown</strong> y <strong>column pruning</strong>. Luego elige el plan físico.',
+  '<b>Paso 3/5 · Tungsten.</b> Ejecución apretada: memoria off-heap y código generado por etapas.',
+  '<b>Paso 4/5 · AQE.</b> Vuelve a optimizar <strong>en runtime</strong> con tamaños reales después del shuffle (puede cambiar el join).',
+  '<b>Paso 5/5 · Formato y broadcast.</b> Parquet (columnar) es el default de producción. Si la dimensión es chica, <strong>broadcast</strong> evita shufflear la tabla de hechos. Delta / Iceberg / Hudi suman ACID sobre ese Parquet. ✓'
+],
+titles:['1/5 lógico','2/5 Catalyst','3/5 Tungsten','4/5 AQE','5/5 Parquet ✓'],
+init(){ this.svg=$('#svgArch'); svgDefs(this.svg);
+  this.ch=animChrome('svgArch',5,'Pulsa <b>Reproducir</b>: Catalyst, Tungsten, AQE.');
+  this.playBtn=document.querySelector('[onclick="animPipeline.play()"]'); this.playBtn._idleLabel=this.playBtn.innerHTML;
+  this.cap=$('#archCaption'); this.draw();
+  animSetUI(this.ch,this.playBtn,'idle',0,5,null,this.cap,'Pulsa "Siguiente paso" o "Reproducir".'); },
+draw(){ const s=this.svg; s.innerHTML=''; svgDefs(s);
+  s.appendChild(nodeBox(120,150,'DataFrame',cGold,cGold));
+  s.appendChild(nodeBox(300,80,'Catalyst',cBlue,cBlue));
+  s.appendChild(nodeBox(480,80,'Tungsten',cPurple,cPurple));
+  s.appendChild(nodeBox(480,220,'AQE',cOrange,cOrange));
+  s.appendChild(nodeBox(640,150,'Parquet',cTeal,cTeal));
+  arrow(s,186,140,250,100,cBlue,'plan');
+  arrow(s,366,80,414,80,cPurple,'codegen');
+  arrow(s,480,102,480,198,cOrange,'stats');
+  arrow(s,546,150,574,150,cTeal,'scan');
+  const t=el('text',{x:300,y:300,'text-anchor':'middle',class:'tedge'});
+  t.textContent=this.idx>=4?'broadcast si la dimensión cabe':'pushdown + pruning antes de ejecutar';
+  s.append(t);
+},
+advance(manual){ if(this.idx>=this.steps.length) return;
+  const st=this.steps[this.idx]; this.draw();
+  animSetUI(this.ch,this.playBtn,(this.playing&&!manual)?'playing':'paused',this.idx+1,5,st,this.cap,st);
+  glowIdx(this.svg,[[0],[1],[2],[3],[4]][this.idx]); svgCap(this.svg,this.titles[this.idx],330); flowOn(this.svg,this.playing&&!manual);
+  this.idx++; if(this.idx>=this.steps.length) this.finish(); },
+play(){ if(this.playing){ this.pause(); return; } if(this.idx>=this.steps.length) this.reset();
+  this.playing=true; animSetUI(this.ch,this.playBtn,'playing',this.idx,5); flowOn(this.svg,true);
+  const self=this; this.timer=setInterval(function(){ self.advance(false); },1500); },
+pause(){ this.playing=false; if(this.timer) clearInterval(this.timer); this.timer=null; flowOn(this.svg,false); animSetUI(this.ch,this.playBtn,'paused',this.idx,5); },
+step(){ if(this.playing) this.pause(); this.advance(true); },
+finish(){ if(this.timer) clearInterval(this.timer); this.timer=null; this.playing=false; flowOn(this.svg,false);
+  animSetUI(this.ch,this.playBtn,'done',5,5,'<b>✓ Optimización.</b> Catalyst planea, Tungsten ejecuta, AQE corrige con datos reales. Parquet + broadcast cuando la tabla chica cabe.',this.cap,'Catalyst, AQE, Parquet ✓'); },
+reset(){ if(this.timer) clearInterval(this.timer); this.timer=null; this.playing=false; this.idx=0; this.draw(); animSetUI(this.ch,this.playBtn,'idle',0,5,'Pulsa <b>Reproducir</b>: Catalyst, Tungsten, AQE.',this.cap,'Pulsa "Siguiente paso" o "Reproducir".'); } };
+
+const animTokens = { idx:0, timer:null, playing:false,
+steps:[
+  '<b>Paso 1/6 · Schema.</b> <code>inferSchema</code> se rompe con comas dentro del texto. DDL: <code>id long, user string, sentiment string, text string</code>. El archivo del código es <code>twitter_training.csv</code>.',
+  '<b>Paso 2/6 · Limpieza.</b> Quita URLs y menciones, baja a minúsculas, recorta espacios y filtra textos vacíos. El resultado es <code>text_clean</code>.',
+  '<b>Paso 3/6 · Tokenizer.</b> Parte <code>text_clean</code> en palabras. Tokenizar la columna <code>text</code> cruda mezcla URLs y puntuación.',
+  '<b>Paso 4/6 · StopWords.</b> <code>StopWordsRemover</code> tira artículos y preposiciones.',
+  '<b>Paso 5/6 · explode + count.</b> Una fila por token, luego <code>groupBy("token").count()</code>. Sin ese conteo la nube de palabras no tiene frecuencias.',
+  '<b>Paso 6/6 · Tópicos.</b> <strong>CountVectorizer</strong> (bolsa) → <strong>IDF</strong> (pesa lo raro) → <strong>LDA</strong> (<code>k</code> temas). <code>describeTopics</code> muestra las palabras de cada tema. ✓'
+],
+titles:['1/6 schema','2/6 regex','3/6 tokens','4/6 stops','5/6 count','6/6 LDA ✓'],
+init(){ this.svg=$('#svgTok'); svgDefs(this.svg);
+  this.ch=animChrome('svgTok',6,'Pulsa <b>Reproducir</b>: tweets, tokens y LDA.');
+  this.playBtn=document.querySelector('[onclick="animTokens.play()"]'); this.playBtn._idleLabel=this.playBtn.innerHTML;
+  this.cap=$('#tokCaption'); this.draw();
+  animSetUI(this.ch,this.playBtn,'idle',0,6,null,this.cap,'Pulsa "Siguiente paso" o "Reproducir".'); },
+draw(){ const s=this.svg; s.innerHTML=''; svgDefs(s);
+  s.appendChild(nodeBox(110,120,'CSV text',cGold,cGold));
+  s.appendChild(nodeBox(270,120,'text_clean',cOrange,cOrange));
+  s.appendChild(nodeBox(430,120,'tokens',cTeal,cTeal));
+  s.appendChild(nodeBox(590,120,'stops',cPurple,cPurple));
+  s.appendChild(nodeBox(360,240,'count / LDA',cBlue,cBlue));
+  arrow(s,176,120,204,120,cOrange,'regex');
+  arrow(s,336,120,364,120,cTeal,'split');
+  arrow(s,496,120,524,120,cPurple,'stop');
+  arrow(s,520,142,420,220,cBlue,'explode');
+  const t=el('text',{x:360,y:310,'text-anchor':'middle',class:'tedge'});
+  t.textContent='Tokenizer sobre text_clean, no sobre text crudo';
+  s.append(t);
+},
+advance(manual){ if(this.idx>=this.steps.length) return;
+  const st=this.steps[this.idx]; this.draw();
+  animSetUI(this.ch,this.playBtn,(this.playing&&!manual)?'playing':'paused',this.idx+1,6,st,this.cap,st);
+  glowIdx(this.svg,[[0],[1],[2],[3],[4],[4]][this.idx]); svgCap(this.svg,this.titles[this.idx],340); flowOn(this.svg,this.playing&&!manual);
+  this.idx++; if(this.idx>=this.steps.length) this.finish(); },
+play(){ if(this.playing){ this.pause(); return; } if(this.idx>=this.steps.length) this.reset();
+  this.playing=true; animSetUI(this.ch,this.playBtn,'playing',this.idx,6); flowOn(this.svg,true);
+  const self=this; this.timer=setInterval(function(){ self.advance(false); },1500); },
+pause(){ this.playing=false; if(this.timer) clearInterval(this.timer); this.timer=null; flowOn(this.svg,false); animSetUI(this.ch,this.playBtn,'paused',this.idx,6); },
+step(){ if(this.playing) this.pause(); this.advance(true); },
+finish(){ if(this.timer) clearInterval(this.timer); this.timer=null; this.playing=false; flowOn(this.svg,false);
+  animSetUI(this.ch,this.playBtn,'done',6,6,'<b>✓ Texto.</b> Schema explícito, limpieza, tokens, stops, conteo y recién entonces LDA.',this.cap,'Tweets → tokens → LDA ✓'); },
+reset(){ if(this.timer) clearInterval(this.timer); this.timer=null; this.playing=false; this.idx=0; this.draw(); animSetUI(this.ch,this.playBtn,'idle',0,6,'Pulsa <b>Reproducir</b>: tweets, tokens y LDA.',this.cap,'Pulsa "Siguiente paso" o "Reproducir".'); } };
+
+renderModuleNav(); renderModule(); renderCases(); renderGlossary(''); updateProgress(); updateContinueCard();
+enhanceTips($('#view-inicio'));
+enhanceTips($('#view-animaciones'));
+enhanceTips($('#cheatsheetContent'));
+// Deep-link hash: #aprende/m6 or #animaciones/anim-lazy or #quiz
+(function bootHash(){
+  const h = (location.hash||'').replace(/^#/, '');
+  if (!h) return;
+  const parts = h.split('/');
+  if (parts[0]==='aprende' && parts[1]) goModule(parts[1], {instant:true});
+  else if (parts[0]==='animaciones') go('animaciones', {animId: parts[1], instant:true});
+  else if (parts[0]==='quiz') go('quiz', {instant:true});
+  else if (parts[0]==='casos') go('quiz', {panel:'cases', instant:true});
+  else if (parts[0]==='glosario') go('glosario', {instant:true});
+  else if (parts[0]==='cheatsheet') go('cheatsheet', {instant:true});
+})();
+</script>
+<script src="../assets/gsap.min.js"></script>
+<script src="../assets/learn-stage.js"></script>
+</body>
+</html<section id="view-animaciones" class="view">
+  <span class="kicker">Laboratorio visual</span>
+  <h2>Animaciones interactivas</h2>
+  <p class="lede">Del un solo CPU al DAG, el shuffle, Catalyst y la limpieza de tweets. Cada animación tiene play, paso y narrador.</p>
+  <div class="card accent-blue" id="anim-cpu"><h3>1 · CPU, RAM y los dos límites</h3>
+    <p style="font-size:14px;">Pandas y numpy en un hilo. La RAM guarda datos e intermedios; el tiempo es el otro techo.</p>
+    <div class="controls"><button class="btn small" onclick="animCpu.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animCpu.play()">Reproducir</button><button class="btn small ghost" onclick="animCpu.reset()">Reiniciar</button></div>
+    <figure><svg id="svgGraph" viewBox="0 0 720 360" role="img"></svg><figcaption>Recursos · <span id="graphCaption">Pulsa "Siguiente paso".</span></figcaption></figure>
+    <p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m0')">Leer en Aprende → Módulo 0</button></p></div>
+  <div class="card accent-purple" id="anim-arch"><h3>2 · Driver, cluster manager y executors</h3>
+    <p style="font-size:14px;">El driver arma el DAG. El CM asigna. Los executors corren tasks y guardan cache. <code>local[*]</code>, client o cluster.</p>
+    <div class="controls"><button class="btn small" onclick="animArch.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animArch.play()">Reproducir</button><button class="btn small ghost" onclick="animArch.reset()">Reiniciar</button></div>
+    <figure><svg id="svgCheck" viewBox="0 0 720 360" role="img"></svg><figcaption>Arquitectura · <span id="checkCaption">Pulsa "Siguiente paso".</span></figcaption></figure>
+    <p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m3')">Leer en Aprende → Módulo 3</button></p></div>
+  <div class="card accent-teal" id="anim-lazy"><h3>3 · Lazy: el plan espera a la acción</h3>
+    <p style="font-size:14px;"><code>select</code> y <code>filter</code> no ejecutan. <code>explain</code> muestra el plan. <code>show</code>, <code>count</code> o <code>write</code> disparan el job.</p>
+    <div class="controls"><button class="btn small" onclick="animLazy.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animLazy.play()">Reproducir</button><button class="btn small ghost" onclick="animLazy.reset()">Reiniciar</button></div>
+    <figure><svg id="svgEnemy" viewBox="0 0 720 360" role="img"></svg><figcaption>Lazy · <span id="enemyCaption">Pulsa "Siguiente paso".</span></figcaption></figure>
+    <p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m6')">Leer en Aprende → Módulo 6</button></p></div>
+  <div class="card accent-orange" id="anim-shuffle"><h3>4 · Narrow, wide, stages y cache</h3>
+    <p style="font-size:14px;">El shuffle es la frontera cara. <code>repartition</code> lo paga; <code>coalesce</code> solo reduce particiones. <code>persist</code> si hay varias acciones.</p>
+    <div class="controls"><button class="btn small" onclick="animShuffle.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animShuffle.play()">Reproducir</button><button class="btn small ghost" onclick="animShuffle.reset()">Reiniciar</button></div>
+    <figure><svg id="svgZookie" viewBox="0 0 720 360" role="img"></svg><figcaption>Shuffle · <span id="zookieCaption">Pulsa "Siguiente paso".</span></figcaption></figure>
+    <p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m7')">Leer en Aprende → Módulo 7</button></p></div>
+  <div class="card accent-gold" id="anim-pipeline"><h3>5 · Catalyst, Tungsten, AQE y Parquet</h3>
+    <p style="font-size:14px;">Pushdown y pruning, ejecución off-heap, reoptimización en runtime, y broadcast cuando la dimensión es chica.</p>
+    <div class="controls"><button class="btn small" onclick="animPipeline.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animPipeline.play()">Reproducir</button><button class="btn small ghost" onclick="animPipeline.reset()">Reiniciar</button></div>
+    <figure><svg id="svgArch" viewBox="0 0 720 360" role="img"></svg><figcaption>Optimización · <span id="archCaption">Pulsa "Siguiente paso".</span></figcaption></figure>
+    <p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m8')">Leer en Aprende → Módulo 8</button></p></div>
+  <div class="card accent-pink" id="anim-tokens"><h3>6 · Tweets: regex, tokens y LDA</h3>
+    <p style="font-size:14px;">Schema explícito, limpieza a <code>text_clean</code>, Tokenizer, stopwords, explode y el trío CountVectorizer → IDF → LDA.</p>
+    <div class="controls"><button class="btn small" onclick="animTokens.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animTokens.play()">Reproducir</button><button class="btn small ghost" onclick="animTokens.reset()">Reiniciar</button></div>
+    <figure><svg id="svgTok" viewBox="0 0 720 360" role="img"></svg><figcaption>Texto · <span id="tokCaption">Pulsa "Siguiente paso".</span></figcaption></figure>
+    <p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m9')">Leer en Aprende → Módulo 9</button></p></div>
+</section>
+<section id="view-quiz" class="view">
+  <span class="kicker">Comprueba tu aprendizaje</span>
+  <h2>Quiz y casos</h2>
+  <p class="lede">Las marcadas con <span class="pill gold">trade-off</span> preguntan <strong>qué se gana y qué se pierde</strong>. Usa Estudio (feedback ya), Examen (nota al final) o Solo falladas.</p>
+  <div class="seg-tabs" role="tablist" aria-label="Quiz o casos">
+    <button type="button" class="seg-tab active" id="tabQuizPanel" data-panel="quiz">Preguntas</button>
+    <button type="button" class="seg-tab" id="tabCasesPanel" data-panel="cases">Casos</button>
+  </div>
+  <div class="quiz-panel active" id="quizPanel">
+    <div class="quiz-toolbar">
+      <span class="score-chip" id="scoreChip">0 / 0 correctas</span>
+      <div class="quiz-modes" id="quizModes">
+        <button type="button" class="btn ghost small seg-on" data-mode="study">Estudio</button>
+        <button type="button" class="btn ghost small" data-mode="exam">Examen</button>
+        <button type="button" class="btn ghost small" data-mode="wrong">Solo falladas</button>
+      </div>
+      <div class="quiz-filters" id="quizFilters"></div>
+      <div class="quiz-page-ctl" id="quizPageCtl">
+        <span style="font-size:12px;color:var(--dim);font-family:var(--mono);">Vista</span>
+        <button type="button" class="btn ghost small" data-page="1">1</button>
+        <button type="button" class="btn ghost small" data-page="5">5</button>
+        <button type="button" class="btn ghost small seg-on" data-page="all">Todas</button>
+      </div>
+      <button class="btn ghost small" type="button" onclick="quiz.reset()">Reiniciar</button>
+    </div>
+    <div class="quiz-nav" id="quizNav" hidden>
+      <button type="button" class="btn ghost small" id="quizPrev">← Anterior</button>
+      <div class="quiz-map" id="quizMap"></div>
+      <button type="button" class="btn ghost small" id="quizNext">Siguiente →</button>
+    </div>
+    <div id="quizContainer"></div>
+    <div class="quiz-result" id="quizResult">
+      <div class="big-score" id="quizPercent">0%</div>
+      <div class="grade-bar"><div class="grade-fill" id="gradeFill"></div></div>
+      <p id="quizMsg" style="text-align:center; margin:0 auto;"></p>
+      <div class="quiz-remediation" id="quizRemediation"></div>
+    </div>
+  </div>
+  <div class="cases-panel" id="casesPanel">
+    <h2 style="margin-top:8px;">Casos prácticos</h2>
+    <p class="lede">Intenta resolver antes de ver la solución. Pistas y soluciones se guardan en este dispositivo.</p>
+    <div id="casesContainer"></div>
+  </div>
+</section>
+<section id="view-glosario" class="view">
+  <span class="kicker">Referencia rápida</span>
+  <h2>Glosario</h2>
+  <p class="lede">Misma fuente que las burbujas del Aprende. Escribe para filtrar (ej: shuffle, Catalyst, linaje).</p>
+  <input class="glossary-search" id="glossarySearch" type="text" placeholder="Filtra por término (ej: shuffle, Catalyst, linaje)…">
+  <div id="glossaryList"></div>
+</section>
+<section id="view-cheatsheet" class="view">
+  <span class="kicker">Repaso de último minuto</span>
+  <h2>Cheatsheet</h2>
+  <p class="lede">Todo lo esencial en una página. Ideal para imprimir o guardar PDF antes del quiz.</p>
+  <div class="hero-cta print-hint" style="margin:10px 0 16px;">
+    <button type="button" class="btn teal small" onclick="window.print()">Imprimir / Guardar PDF</button>
+    <span style="font-size:13px;color:var(--dim);">Esta pestaña ya está activa — Ctrl+P también funciona.</span>
+  </div>
+  <div id="cheatsheetContent"></div>
+</section>
+</main>
+<footer>Herramienta de estudio sobre Apache Spark y PySpark (resumen DWH/Spark y notebook de Colab). Leer con las figuras → practicar.</footer>
+<script>
+﻿const MODULES = [
+{ id:'m0', tag:'Módulo 0', accent:'gold', title:'Recursos: CPU, RAM y los dos límites',
+summary:'Un solo núcleo por defecto, memoria para intermedios, y cuándo una máquina no alcanza.',
+html: `
+<p class="lede">Antes de repartir el trabajo hay que ver con qué se cuenta: núcleos, memoria y disco. El taller arranca ahí, con pandas y numpy en un hilo.</p>
+<div class="callout info"><div class="lbl">[clase/notebook]</div>En análisis de datos los recursos se agrupan en <strong>capacidad de procesamiento</strong> (CPUs; GPUs en casos especiales) y <strong>capacidad de memoria y disco</strong>. La RAM guarda los datos y también los <strong>intermedios</strong> del cómputo. El disco entra cuando la RAM no alcanza.</div>
+<table><tr><th>Limitación</th><th>Cómo se manifiesta</th></tr>
+<tr><td><strong>Memoria</strong></td><td>El dataset no cabe en la RAM de una sola máquina.</td></tr>
+<tr><td><strong>Tiempo</strong></td><td>Hace falta baja latencia, casi tiempo real, y un solo hilo no llega.</td></tr></table>
+<div class="callout tip"><div class="lbl">[didáctico]</div>R y Python <strong>por defecto usan un solo CPU</strong> aunque el equipo tenga más núcleos. El notebook lo contrasta con dos demos: <code>pandas</code> sobre <code>california_housing_train.csv</code> (~17&nbsp;000 filas, barras por edad de la vivienda) y <code>numpy</code> sumando una matriz 800×800, con un solo hilo visible en el monitor.</div>
+<div class="callout info"><div class="lbl">[resumen]</div>Los DWH modernos y motores como Spark atacan el mismo problema: <strong>muchas filas y consultas pesadas</strong>, con paralelismo y, en clúster, <strong>MPP</strong>.</div>
+<div class="trade"><b>Trade-off 0 · Quedarse en un proceso.</b> Ganas: el código de pandas o numpy es directo. Pierdes: el resto de núcleos y cualquier dataset que no quepa en esa RAM.</div>
+`,
+mini:{q:'Según el taller, pandas y numpy por defecto usan…', opts:['Todos los núcleos del equipo','Un solo CPU','La GPU siempre','Un executor por columna'], a:1, why:'El notebook lo muestra a propósito: un hilo, aunque haya más núcleos.'} },
+{ id:'m1', tag:'Módulo 1', accent:'blue', title:'Procesamiento paralelo vs distribuido',
+summary:'Un nodo con N núcleos frente a N máquinas. local[*] no es un clúster.',
+html: `
+<p class="lede">Paralelo y distribuido no son sinónimos. Distribuido es el caso en que las tareas ya no viven en la misma computadora.</p>
+<div class="callout info"><div class="lbl">[clase/notebook]</div><strong>Procesamiento paralelo:</strong> el código se divide en procesos o hilos que aprovechan los CPUs de una máquina (o de varias, si hay red). <strong>Procesamiento distribuido:</strong> subconjunto de ese paralelismo en el que las tareas corren en <strong>distintas computadoras</strong> del clúster.</div>
+<pre><code>rdd = spark.sparkContext.parallelize(range(800 * 800))</code></pre>
+<div class="callout info"><div class="lbl">[resumen]</div>En clúster las particiones del dataset viven en varios nodos. Spark puede ir de una máquina a miles; el modo dice dónde corren esas particiones.</div>
+<table><tr><th></th><th>Paralelo (multiproceso)</th><th>Distribuido</th></tr>
+<tr><td>Alcance</td><td>1 nodo, N cores</td><td>N nodos, N×cores</td></tr>
+<tr><td>Ejemplo Spark</td><td><code>local[*]</code></td><td>YARN / Kubernetes / Standalone</td></tr>
+<tr><td>Fallo</td><td>Cae el nodo y cae todo</td><td>Puede tolerarse la caída de un executor (linaje)</td></tr></table>
+<div class="callout tip"><div class="lbl">[didáctico]</div><code>local[*]</code> es paralelo dentro de <strong>una JVM</strong> (un hilo por núcleo). No es un clúster: si esa máquina muere, no hay otro nodo que retome el linaje.</div>
+<div class="trade"><b>Trade-off 1 · Una máquina vs un clúster.</b> Ganas en local: cero operación de clúster, ideal para el Colab. Pierdes: techo de RAM y un solo punto de fallo.</div>
+`,
+mini:{q:'Procesamiento distribuido, en el notebook, es…', opts:['Cualquier uso de más de un núcleo','Tareas en distintas computadoras del clúster','Solo SQL','Escribir un CSV'], a:1, why:'Distribuido es el paralelismo que cruza de máquina.'} },
+{ id:'m2', tag:'Módulo 2', accent:'purple', title:'Spark frente a Hadoop MapReduce',
+summary:'Memoria en vez de disco entre etapas, motor unificado, y Spark no guarda los datos.',
+html: `
+<p class="lede">Spark nace en UC Berkeley (AMPLab, 2009, Matei Zaharia) y pasa a la Apache Software Foundation. Es un motor de procesamiento distribuido, no un almacén.</p>
+<div class="callout info"><div class="lbl">[resumen]</div>Procesa <strong>en memoria</strong>, así que en iteraciones va mucho más rápido que MapReduce, que <strong>persiste en disco</strong> entre map y reduce. Es un <strong>motor unificado</strong>: batch, SQL, streaming, ML y grafos. Lenguajes: Scala (nativo), Python (PySpark), Java, R y SQL. <strong>No es almacenamiento:</strong> lee HDFS, S3, Azure Blob, JDBC, Kafka, Parquet y otros.</div>
+<table><tr><th>Aspecto</th><th>MapReduce</th><th>Spark</th></tr>
+<tr><td>Intermedios</td><td>Disco</td><td>Memoria (disco si hace falta)</td></tr>
+<tr><td>Operaciones</td><td>map + reduce</td><td>map, filter, join, groupBy, SQL…</td></tr>
+<tr><td>Modalidades</td><td>Batch</td><td>Batch, streaming, ML, SQL, grafos</td></tr>
+<tr><td>Iteraciones (ML)</td><td>Lentas</td><td>Eficientes</td></tr>
+<tr><td>API</td><td>Verbosa (Java)</td><td>Alto nivel (DataFrame, SQL)</td></tr></table>
+<div class="callout info"><div class="lbl">[clase/notebook]</div>El notebook lo resume así: Spark reparte el trabajo en <strong>una o miles</strong> de máquinas y aprieta memoria y CPUs.</div>
+<div class="callout tip"><div class="lbl">[didáctico]</div>Spark puede correr <strong>sobre</strong> Hadoop (YARN + HDFS). Reemplaza a MapReduce como motor de cómputo. No tiene que reemplazar todo el ecosistema Hadoop.</div>
+<div class="trade"><b>Trade-off 2 · Memoria contra disco.</b> Ganas: iteraciones rápidas y un solo API. Pierdes: si el working set no cabe, Spark igual derrama a disco y el mito de "siempre en RAM" se cae.</div>
+<div class="callout warn"><div class="lbl">[resumen]</div>Error común: tratar Spark como base de datos. No guarda el dataset; lo lee de otro sistema y puede escribir el resultado de vuelta.</div>
+`,
+mini:{q:'¿Por qué Spark gana a MapReduce en iteraciones?', opts:['Porque no tiene shuffle','Porque mantiene intermedios en memoria','Porque solo corre en un CPU','Porque es un sistema de archivos'], a:1, why:'MapReduce escribe disco entre map y reduce. Spark evita ese viaje cuando la RAM alcanza.'} },
+{ id:'m3', tag:'Módulo 3', accent:'teal', title:'Stack, driver, executors y despliegue',
+summary:'Core, SQL, GraphX, SparkML, más el trío driver / cluster manager / executor.',
+html: `
+<p class="lede">El ecosistema se apila sobre un cluster manager y un almacén. Quien arma el plan es el driver; quien lo corre son los executors.</p>
+<div class="callout info"><div class="lbl">[clase/notebook]</div>Nombres del notebook (el ML del taller es <strong>SparkML</strong>):</div>
+<table><tr><th>Componente</th><th>Rol</th></tr>
+<tr><td><strong>Spark Core</strong></td><td>Motor base: scheduling, memoria, fallos y <strong>RDD</strong>.</td></tr>
+<tr><td><strong>Spark SQL</strong></td><td>DataFrames y consultas SQL.</td></tr>
+<tr><td><strong>GraphX</strong></td><td>Grafos (PageRank y similares).</td></tr>
+<tr><td><strong>SparkML</strong></td><td>Pipelines de ML: clasificación, clustering, LDA.</td></tr>
+<tr><td><strong>Structured Streaming</strong></td><td>Datos en tiempo casi real: <strong>micro-batches</strong>, el stream se trata como <strong>una tabla que crece</strong>.</td></tr>
+<tr><td><strong>MLlib</strong></td><td>API de ML del resumen. En la práctica moderna mucho vive en <code>pyspark.ml</code>.</td></tr></table>
+<div class="callout info"><div class="lbl">[resumen]</div>Por debajo hay un <strong>cluster manager</strong> y un <strong>almacenamiento</strong> (HDFS, S3, Parquet, Delta, JDBC, Kafka). El driver crea la <code>SparkSession</code>, convierte el programa en un <strong>DAG</strong>, lo corta en stages y tasks, y coordina. El cluster manager (Standalone, YARN, Kubernetes; Mesos deprecado) asigna recursos. Los executors corren tasks, guardan cache y reportan al driver.</div>
+<table><tr><th>Modo</th><th>Dónde vive el driver</th></tr>
+<tr><td><strong>local</strong></td><td>Todo en una JVM. <code>local[*]</code> = un hilo por núcleo. Sirve para pruebas.</td></tr>
+<tr><td><strong>client</strong></td><td>Driver en la máquina de quien lanza el trabajo (notebook, IDE).</td></tr>
+<tr><td><strong>cluster</strong></td><td>Driver dentro del clúster.</td></tr></table>
+<div class="callout tip"><div class="lbl">[didáctico]</div>Mnemotecnia: <strong>driver piensa, CM reparte, executor trabaja</strong>. Si el driver está en tu laptop (client) y cierras la sesión, el trabajo se queda sin coordinador.</div>
+<pre><code>         Driver (SparkSession, DAG, stages/tasks)
+              │
+   ┌──────────┼──────────┐
+   ▼          ▼          ▼
+Executor   Executor   Executor   ← tasks + cache
+              ▲
+       Cluster Manager (Standalone | YARN | K8s)</code></pre>
+<div class="trade"><b>Trade-off 3 · client vs cluster.</b> Ganas en client: ves logs y depuras desde el notebook. Pierdes: el driver compite con tu máquina y un corte de red tumba el job.</div>
+`,
+mini:{q:'¿Quién convierte el programa en un DAG?', opts:['Cada executor','El driver','El archivo Parquet','El Tokenizer'], a:1, why:'El driver planifica. Los executors ejecutan tasks.'} },
+{ id:'m4', tag:'Módulo 4', accent:'orange', title:'PySpark, SparkSession y la regla de oro',
+summary:'Ejecución remota aunque el master sea local, más el quirk de Java en Colab.',
+html: `
+<p class="lede">PySpark es la librería Python para un clúster Spark. Muchas operaciones de pandas tienen análogo, con otros métodos. El cómputo no ocurre en el ciclo <code>for</code> de Python.</p>
+<div class="callout info"><div class="lbl">[clase/notebook]</div><strong>Regla de oro:</strong> los procesamientos ocurren en un entorno de ejecución distinto al intérprete Python. Hay que pensar en <strong>ejecución remota</strong>, incluso con <code>master("local[*]")</code>.</div>
+<div class="callout tip"><div class="lbl">[didáctico]</div>Consecuencias que caen en el examen: no recorras filas con bucles Python masivos; no hagas <code>collect()</code> de un dataset grande (trae todo al driver); una UDF es más lenta que una función nativa de Spark SQL; <code>toPandas()</code> solo para una muestra o un gráfico.</div>
+<div class="callout info"><div class="lbl">[resumen]</div>La sesión es la puerta de entrada a las APIs (DataFrame, SQL, y el resto del stack). Crearla y cerrarla con <code>spark.stop()</code> libera los recursos del proceso.</div>
+<h3>Secuencia típica en Colab</h3>
+<ol>
+<li>Descargar y descomprimir Spark (en el taller, <code>spark-4.3.0-bin-hadoop3</code>).</li>
+<li><code>pip install findspark pyspark</code>.</li>
+<li>Fijar <code>JAVA_HOME</code> y <code>SPARK_HOME</code>.</li>
+<li><code>findspark.init()</code> y entonces <code>SparkSession</code>.</li>
+</ol>
+<pre><code>import os
+import findspark
+os.environ["JAVA_HOME"] = "/usr/lib/jvm/java-21-openjdk-amd64"
+os.environ["SPARK_HOME"] = "/content/spark-4.3.0-bin-hadoop3"
+findspark.init()
+from pyspark.sql import SparkSession
+spark = (SparkSession.builder
+    .master("local[*]")
+    .appName("BDII-PySpark")
+    .getOrCreate())
+# spark.stop()</code></pre>
+<div class="callout warn"><div class="lbl">[clase/notebook]</div><strong>Quirk de Java.</strong> La primera celda intenta <code>apt-get install openjdk-8</code> y a veces el apt responde 404. La celda siguiente apunta <code>JAVA_HOME</code> a <code>java-21-openjdk-amd64</code>. En la práctica <strong>funciona con Java 21</strong> si Spark ya está descomprimido. No hace falta forzar Java 8 salvo que el runtime lo exija. Otro quirk: varias celdas dicen "Escriba el código aquí" y la solución ya está en la celda de abajo.</div>
+<div class="trade"><b>Trade-off 4 · La comodidad de Python.</b> Ganas: el mismo lenguaje que el resto del análisis. Pierdes: cada ida y vuelta con el driver (collect, toPandas, UDF fila a fila) borra la ventaja del motor.</div>
+`,
+mini:{q:'La regla de oro pide pensar el cómputo como…', opts:['Un bucle Python sobre cada fila','Ejecución remota, incluso en local[*]','Siempre un collect al final','Una UDF obligatoria'], a:1, why:'El intérprete Python arma el plan. El motor lo corre en otro lado.'} },
+{ id:'m5', tag:'Módulo 5', accent:'pink', title:'DataFrames: lectura, esquema, select y SQL',
+summary:'Housing en California: schema, tres formas de nombrar columnas, y una vista temporal.',
+html: `
+<p class="lede">Si el archivo está donde Spark puede leerlo, la carga es del motor, no de pandas. El taller lo practica con el CSV de vivienda.</p>
+<div class="callout info"><div class="lbl">[clase/notebook]</div>APIs de lectura: <code>spark.read.csv</code>, <code>json</code>, <code>parquet</code> (el preferido en producción), <code>text</code> (una columna por línea) y <code>kafka</code>. Opciones frecuentes: <code>header=True</code>, <code>inferSchema=True</code>, <code>schema=...</code>, y <code>mode("overwrite")</code> al escribir.</div>
+<p>Dos caminos para housing. <strong>Pandas primero</strong> y luego <code>spark.createDataFrame(pddf)</code>: útil en un prototipo chico, porque el driver carga todo. <strong>Directo</strong> con <code>spark.read.csv(path, schema=..., header=True)</code>: es el camino que escala.</p>
+<h3>Esquema: string DDL y StructType</h3>
+<pre><code>schema_str = """
+    longitude double, latitude double, housing_median_age double,
+    total_rooms double, total_bedrooms double, population double,
+    households double, median_income double, median_house_value double
+"""
+df = spark.read.csv(path, header=True, schema=schema_str)</code></pre>
+<pre><code>from pyspark.sql.types import StructType, StructField, DoubleType
+schema = StructType([
+    StructField("longitude", DoubleType(), True),
+    StructField("latitude", DoubleType(), True),
+])
+df = spark.read.csv(path, header=True, schema=schema)</code></pre>
+<div class="callout tip"><div class="lbl">[didáctico]</div>Declarar el esquema evita la <strong>doble pasada</strong> de <code>inferSchema</code> y la sorpresa de "todo string". Alinea los tipos con el CSV real. El atributo <code>df.total_rooms</code> no sirve si el nombre tiene espacios: ahí manda <code>F.col</code>.</div>
+<pre><code>from pyspark.sql import functions as F
+(df.select(
+    "housing_median_age",
+    df.total_rooms,
+    (F.col("housing_median_age") + F.col("total_rooms")).alias("edad_mas_habitaciones"),
+).limit(10))</code></pre>
+<pre><code>df.createOrReplaceTempView("Housing")
+spark.sql("SELECT housing_median_age FROM Housing LIMIT 10").show()</code></pre>
+<div class="callout info"><div class="lbl">[resumen]</div>RDD, DataFrame y Dataset no pasan igual por el optimizador. En PySpark el camino es el DataFrame.</div>
+<table><tr><th></th><th>RDD</th><th>DataFrame</th><th>Dataset</th></tr>
+<tr><td>Estructura</td><td>Objetos sin esquema</td><td>Columnas con nombre y tipo</td><td>DataFrame tipado (Scala/Java)</td></tr>
+<tr><td>Catalyst</td><td>No</td><td>Sí</td><td>Sí</td></tr>
+<tr><td>Hoy en PySpark</td><td>Legado</td><td><strong>La API a usar</strong></td><td>No es el camino Python</td></tr></table><div class="callout info"><div class="lbl">[resumen]</div>En Scala, <code>DataFrame = Dataset[Row]</code>. El Dataset tipado solo existe en Scala/Java. En PySpark el camino es el DataFrame.</div>
+<div class="callout warn"><div class="lbl">[clase/notebook]</div><strong>Quirk de tipos.</strong> Un ejemplo del notebook mezcla <code>IntegerType</code> en <code>total_rooms</code> con <code>DoubleType</code> en otras columnas. Si el header no calza, aparecen nulos raros. Mejor un esquema homogéneo (todo double en la lectura) y el cast explícito después, o <code>inferSchema=True</code> más un cast.</div>
+<div class="trade"><b>Trade-off 5 · inferSchema vs esquema declarado.</b> Ganas con inferir: una línea y a explorar. Pierdes: una pasada extra y tipos adivinados. En producción se declara.</div>
+<h3>Pipeline housing (corregido)</h3>
+<div class="callout info"><div class="lbl">[clase/notebook]</div>Flujo completo del taller: schema homogéneo → cast a entero donde toca → columna <code>location</code> → SQL → <code>describe</code> → escritura Parquet.</div>
+<pre><code>from pyspark.sql import functions as F
+from pyspark.sql.types import StructType, StructField, DoubleType, IntegerType
+
+PATH = "./sample_data/california_housing_train.csv"
+schema = StructType([
+    StructField("longitude", DoubleType(), True),
+    StructField("latitude", DoubleType(), True),
+    StructField("housing_median_age", DoubleType(), True),
+    StructField("total_rooms", DoubleType(), True),
+    StructField("total_bedrooms", DoubleType(), True),
+    StructField("population", DoubleType(), True),
+    StructField("households", DoubleType(), True),
+    StructField("median_income", DoubleType(), True),
+    StructField("median_house_value", DoubleType(), True),
+])
+df = spark.read.csv(PATH, header=True, schema=schema)
+
+df_conv = df.select(
+    F.col("latitude"), F.col("longitude"),
+    F.col("housing_median_age").cast(IntegerType()).alias("housing_median_age"),
+    F.col("total_rooms").cast(IntegerType()).alias("total_rooms"),
+    F.col("total_bedrooms").cast(IntegerType()).alias("total_bedrooms"),
+    F.col("population").cast(IntegerType()).alias("population"),
+    F.col("households").cast(IntegerType()).alias("households"),
+    F.col("median_income"), F.col("median_house_value"),
+    F.struct("longitude", "latitude").alias("location"),
+)
+df_conv.createOrReplaceTempView("housing")
+spark.sql("""
+  SELECT housing_median_age, AVG(median_house_value) AS avg_value
+  FROM housing WHERE total_rooms &gt; 1000
+  GROUP BY housing_median_age ORDER BY housing_median_age DESC LIMIT 10
+""").show()
+df_conv.describe().show()
+(df_conv.repartition(4).write.mode("overwrite").parquet("output/housing_parquet"))</code></pre>
+`,
+mini:{q:'Una vista temporal creada con createOrReplaceTempView…', opts:['Queda publicada en el DWH','Vive solo en esa SparkSession','Escribe Parquet','Desactiva Catalyst'], a:1, why:'Misma sesión, mismo Catalyst que el API DataFrame. Al cerrar, desaparece.'} },
+{ id:'m6', tag:'Módulo 6', accent:'gold', title:'Ejecución perezosa, map-reduce y acciones',
+summary:'El plan espera. explain lo muestra. show, count y write lo disparan.',
+html: `
+<p class="lede">Nada corre cuando escribes <code>select</code> o <code>filter</code>. Spark acumula el plan para poder achicarlo. La acción es el gatillo.</p>
+<div class="callout info"><div class="lbl">[clase/notebook]</div>Las transformaciones construyen un plan. Las acciones lo ejecutan: <code>show</code>, <code>count</code>, <code>collect</code>, <code>write</code>, y también <code>take</code> o <code>first</code>. <code>explain()</code> muestra el plan físico sin correr el cómputo. <code>explain(True)</code> extiende: lógico, optimizado y físico.</div>
+<pre><code>plan = df.select((F.col("housing_median_age") + F.col("total_rooms")).alias("Housing_3"))
+plan.explain()
+plan.explain(True)</code></pre>
+<div class="callout tip"><div class="lbl">[didáctico]</div>El beneficio de esperar es un plan entero: menos shuffles, proyecciones fusionadas y <strong>predicate pushdown</strong>. Si "no pasa nada" después de un <code>filter</code>, falta la acción.</div>
+<h3>Map y reduce, como idea</h3>
+<table><tr><th>Fase</th><th>Idea</th><th>En DataFrame</th></tr>
+<tr><td><strong>Map</strong></td><td>Transformar cada registro</td><td><code>select</code>, <code>withColumn</code>, tokenizar</td></tr>
+<tr><td><strong>Reduce</strong></td><td>Agrupar y agregar</td><td><code>groupBy("user").count()</code>, <code>agg(avg(...))</code></td></tr></table>
+<div class="callout info"><div class="lbl">[clase/notebook]</div>El notebook también lo muestra en Python puro: la suma de cuadrados de 0 a 99 da <strong>338350</strong>. En el API DataFrame no hay funciones llamadas map y reduce: el patrón son transformaciones más <code>groupBy</code> / <code>agg</code>.</div>
+<pre><code>from functools import reduce
+l = list(range(100))
+reduce(lambda x, y: x + y, map(lambda x: x**2, l))  # 338350</code></pre>
+<div class="callout info"><div class="lbl">[resumen]</div>La transformación alarga el plan. La acción lo ejecuta.</div>
+<table><tr><th>Transformaciones (lazy)</th><th>Acciones</th></tr>
+<tr><td><code>select</code>, <code>filter</code> / <code>where</code>, <code>withColumn</code>, <code>join</code>, <code>groupBy</code>, <code>distinct</code>, <code>flatMap</code>, <code>union</code></td><td><code>show</code>, <code>count</code>, <code>collect</code>, <code>take</code>, <code>first</code>, <code>reduce</code>, <code>saveAsTextFile</code>, <code>write</code></td></tr></table>
+<h3>Conversión de tipos (map sobre columnas)</h3>
+<div class="callout info"><div class="lbl">[clase/notebook]</div>El “map” del taller es un <code>select</code> con <code>.cast</code> y a veces un <code>struct</code>. No hace falta un RDD para tipar columnas.</div>
+<pre><code>from pyspark.sql.types import IntegerType
+df_conversion = df.select(
+    "latitude", "longitude",
+    df.housing_median_age.cast(IntegerType()),
+    df.total_rooms.cast("int"),
+    F.struct("longitude", "latitude").alias("location"),
+)</code></pre>
+<h3>Filtros, describe y agregaciones</h3>
+<p><code>where</code> y <code>filter</code> son <strong>alias</strong>. <code>describe()</code> es una <strong>acción</strong> de perfilado: count, mean, stddev, min y max de columnas numéricas. Un <code>groupBy</code> con agregación y clave distinta es una transformación <strong>wide</strong> (hay shuffle).</p>
+<pre><code>df_conversion.select("median_income").where("total_rooms &gt; 5000").show()
+df_conversion.filter(F.col("total_rooms") &gt; 5000).count()
+df_conversion.where(F.col("location.longitude") &gt; -114.6).select("location").show()
+df_conversion.describe().show()
+(df_conversion.groupBy("housing_median_age")
+    .agg(F.avg("median_house_value").alias("promedio_valor"),
+         F.sum("median_income").alias("suma_ingreso"))
+    .orderBy(F.desc("housing_median_age"))
+    .show())
+(df_conversion.groupBy("total_bedrooms")
+    .agg(F.avg("median_house_value"), F.sum("median_income"))
+    .show())</code></pre>
+<div class="callout warn"><div class="lbl">[didáctico · Learning Spark]</div>Encadenar <code>filter</code>/<code>select</code> y hacer <code>print("listo")</code> <strong>sin acción</strong> no lee el archivo: solo alarga el plan. El error de ruta o de datos aparece en el <code>count</code>/<code>show</code>/<code>write</code>, no en la línea del filtro.</div>
+<div class="trade"><b>Trade-off 6 · Pereza.</b> Ganas: el motor ve el plan completo y tira trabajo inútil. Pierdes: el error de datos aparece en la acción, líneas después de donde escribiste el filtro.</div>
+`,
+mini:{q:'¿Cuál de estas dispara la ejecución?', opts:['select','withColumn','count','filter'], a:2, why:'count es acción. select, withColumn y filter solo alargan el plan.'} },
+{ id:'m7', tag:'Módulo 7', accent:'blue', title:'Narrow, wide, stages, particiones y caché',
+summary:'Dónde está el shuffle, cómo se parten los jobs, y cuándo persistir.',
+html: `
+<p class="lede">El linaje permite rehacer una partición perdida. El shuffle es lo que parte ese grafo en stages y, de paso, lo que más cuesta.</p>
+<div class="callout info"><div class="lbl">[resumen]</div>Un RDD es <strong>resiliente</strong> (si se pierde una partición, el <strong>linaje</strong> la reconstruye; por eso no hace falta replicar los datos), <strong>distribuido</strong>, <strong>inmutable</strong> (cada transformación produce otro) y <strong>lazy</strong>. <strong>Narrow:</strong> una partición de salida depende de una de entrada (<code>map</code>, <code>filter</code>, <code>select</code>, <code>withColumn</code> simple): sin shuffle. <strong>Wide:</strong> la salida depende de muchas entradas (<code>groupBy</code>, <code>join</code>, <code>distinct</code>, <code>orderBy</code>, <code>repartition</code>): hay shuffle por red o disco.</div>
+<div class="callout tip"><div class="lbl">[didáctico]</div>Fórmula: <strong>1 acción = 1 job → N stages (cortados en cada shuffle) → M tasks (una por partición, en lo típico).</strong></div>
+<table><tr><th>Método</th><th>Particiones</th><th>Shuffle</th><th>Cuándo</th></tr>
+<tr><td><code>repartition(n)</code></td><td>Sube o baja</td><td>Sí</td><td>Balancear, o justo antes de una escritura pesada.</td></tr>
+<tr><td><code>coalesce(n)</code></td><td>Solo baja</td><td>Sin shuffle completo</td><td>Reducir particiones al final, más barato.</td></tr></table>
+<div class="callout info"><div class="lbl">[clase/notebook]</div>Al escribir housing el taller hace <code>repartition(1)</code> para un solo CSV (cómodo de abrir, malo para paralelismo) y <code>repartition(10)</code> para unos diez Parquet (mejor si después se lee en distribuido).</div>
+<pre><code>df_join.repartition(1).write.mode("overwrite").csv("ejemplo_escritura_1.csv")
+df_join.repartition(10).write.mode("overwrite").parquet("ejemplo_escritura_1_parquet")
+df_cached = df_datetime.persist()  # MEMORY_AND_DISK
+df_cached.unpersist()</code></pre>
+<table><tr><th>Nivel</th><th>Qué guarda</th><th>Cuándo</th></tr>
+<tr><td><code>MEMORY_ONLY</code> (= <code>cache()</code>)</td><td>Solo RAM</td><td>Cabe holgado y se reusa varias veces.</td></tr>
+<tr><td><code>MEMORY_AND_DISK</code> (default de <code>persist()</code>)</td><td>RAM; el resto a disco</td><td>Recomputar es caro (limpieza de tweets, varias ramas).</td></tr>
+<tr><td><code>DISK_ONLY</code></td><td>Solo disco</td><td>RAM justa y el linaje es pesado.</td></tr></table>
+<p>Si no persistes y hay varias acciones, Spark recomputa el linaje cada vez. Al terminar: <code>unpersist()</code>.</p>
+<div class="callout info"><div class="lbl">[didáctico · Learning Spark]</div>En agregaciones por clave (RDD Pair o idea equivalente), preferí <code>reduceByKey</code> / <code>aggregate</code> con combine local frente a <code>groupByKey</code>+sumar: el primero reduce tráfico de red; el segundo manda listas crudas y puede OOM. Si particionas un dataset grande que reusas en varios joins, <code>repartition</code>/<code>partitionBy</code> + <code>persist</code>: sin persist, cada acción re-shufflea. Tras particionar, transformar solo el valor (<code>mapValues</code> en RDD) conserva el partitioner; un <code>map</code> genérico lo borra y el siguiente join vuelve a shufflear.</div>
+<div class="trade"><b>Trade-off 7 · Shuffle y caché.</b> Ganas con repartition: archivos balanceados. Pierdes: el movimiento de datos. Ganas con persist: no repites la limpieza. Pierdes: RAM (y disco, si el nivel lo permite) ocupada hasta el <code>unpersist</code>.</div>
+`,
+mini:{q:'coalesce(n) se diferencia de repartition porque…', opts:['Siempre aumenta particiones con shuffle','Solo reduce particiones, sin shuffle completo','Es un broadcast','Borra el linaje'], a:1, why:'coalesce baja el número y evita el shuffle completo. No sirve para subir particiones.'} },
+{ id:'m8', tag:'Módulo 8', accent:'purple', title:'Catalyst, Tungsten, AQE y formatos',
+summary:'Quién optimiza el plan, quién lo ejecuta, y por qué Parquet gana al CSV.',
+html: `
+<p class="lede">El DataFrame no se ejecuta "como lo escribiste". Catalyst lo reescribe, Tungsten lo corre apretado y AQE puede cambiar de opinión con los tamaños reales.</p>
+<table><tr><th>Motor</th><th>Qué hace</th></tr>
+<tr><td><strong>Catalyst</strong></td><td>Plan lógico → plan lógico <strong>optimizado</strong> (predicate pushdown, column pruning) → <strong>varios planes físicos</strong> → elección por <strong>costos</strong> → generación de código.</td></tr>
+<tr><td><strong>Tungsten</strong></td><td>Ejecución: memoria <strong>off-heap</strong>, formato binario compacto y <strong>whole-stage code generation</strong>.</td></tr>
+<tr><td><strong>AQE</strong></td><td>Reoptimiza <strong>en runtime</strong> con estadísticas reales (tamaño después del shuffle, otra estrategia de join).</td></tr></table>
+<div class="callout info"><div class="lbl">[resumen]</div>Si una tabla es pequeña, Spark puede <strong>difundirla</strong> a todos los executors y no shufflear la grande. El caso de libro es hechos unidos a una dimensión chica del modelo estrella.</div>
+<div class="callout info"><div class="lbl">[resumen]</div><strong>Tres ideas distintas:</strong> (1) <em>broadcast join</em> = estrategia de join que copia la tabla chica; (2) <em>broadcast variable</em> = dato de solo lectura enviado una vez a cada nodo (lookup, diccionario); (3) <em>accumulator</em> = contador al que los executors solo suman y que el driver lee. No mezcles las tres.</div>
+<h3>Ejemplo del resumen (narrow → wide → acción)</h3>
+<pre><code>from pyspark.sql.functions import col, sum as _sum
+ventas = spark.read.parquet("s3://datos/ventas/")
+productos = spark.read.parquet("s3://datos/productos/")
+resultado = (ventas
+    .filter(col("anio") == 2025)                 # narrow
+    .join(productos, "producto_id")              # wide (o broadcast si es chica)
+    .groupBy("categoria")                        # wide → shuffle
+    .agg(_sum("monto").alias("total_ventas"))
+    .orderBy(col("total_ventas").desc()))
+resultado.show()                                 # ACCIÓN → se ejecuta todo
+ventas.createOrReplaceTempView("ventas")
+spark.sql("SELECT categoria, SUM(monto) FROM ventas GROUP BY categoria").show()</code></pre>
+<table><tr><th>Formato</th><th>Naturaleza</th><th>Notas</th></tr>
+<tr><td>CSV / JSON</td><td>Texto</td><td>Interoperables. El parseo es caro y los tipos son débiles.</td></tr>
+<tr><td><strong>Parquet</strong></td><td>Columnar comprimido</td><td>El preferido en Spark. Entra el predicate pushdown.</td></tr>
+<tr><td>ORC</td><td>Columnar</td><td>Ecosistema Hive.</td></tr>
+<tr><td>Avro</td><td>Por filas</td><td>Evolución de esquema y streaming.</td></tr>
+<tr><td>Delta / Iceberg / Hudi</td><td>Capa sobre Parquet</td><td>ACID y time travel: el <strong>lakehouse</strong>.</td></tr></table>
+<div class="callout info"><div class="lbl">[quiz16]</div><strong>Por qué Parquet acelera en el lago.</strong> Misma columna = mismo tipo → compresión fuerte. El pie del archivo guarda stats por bloque (ej. edad min 18 / máx 35): si el filtro es <code>edad &gt; 50</code>, Spark <strong>salta el bloque</strong> sin bajarlo. Además, partición física en carpetas (<code>/ventas/año=2026/mes=11/…</code>): un <code>WHERE año=2026 AND mes=11</code> ignora el resto de carpetas.</div>
+<div class="callout info"><div class="lbl">[clase/notebook]</div>El taller escribe el mismo housing en CSV y en Parquet. Pandas puede leer solo dos columnas del Parquet de salida:</div>
+<pre><code>import pandas as pd
+pd.read_parquet("ejemplo_escritura_1_parquet", columns=["total_rooms", "total_bedrooms"])</code></pre>
+<div class="callout tip"><div class="lbl">[didáctico]</div>CSV para mirar el archivo con un humano. Parquet para que el clúster lea columnas y empuje filtros. Broadcast solo si la tabla chica <strong>cabe en cada executor</strong>.</div>
+<div class="trade"><b>Trade-off 8 · Broadcast.</b> Ganas: la tabla grande no viaja por la red. Pierdes: una dimensión que no era tan chica revienta la memoria de los executors.</div>
+`,
+mini:{q:'¿Cuándo aplica un broadcast join?', opts:['Cuando una tabla es pequeña y se puede copiar a los executors','Cuando ambas tablas son enormes','Solo con RDD sin esquema','Solo al hacer coalesce'], a:0, why:'Se difunde la chica (típico: dimensión) y se evita el shuffle de la grande (hechos).'} },
+{ id:'m9', tag:'Módulo 9', accent:'teal', title:'Tweets, texto y el puente al DWH',
+summary:'Schema, regex, Tokenizer, LDA, y Spark entre el lago y el almacén.',
+html: String.raw`
+<p class="lede">El cierre del Colab son cerca de 1,6 millones de tweets: texto libre, usuarios y sentimiento. El resumen lo conecta con el lago y el DWH.</p>
+<div class="callout warn"><div class="lbl">[clase/notebook]</div><strong>Quirk de archivo.</strong> El markdown dice <code>/content/traindata.csv</code>. El código abre <code>/content/twitter_training.csv</code>. Usa el nombre del código, o renombra al subir. <code>inferSchema=True</code> suele fallar: las comas del texto parten columnas de más. El esquema va declarado.</div>
+<pre><code>schema_str = "id long, user string, sentiment string, text string"
+df_twitter = spark.read.csv(path, header=True, schema=schema_str)
+df_twitter.where(F.col("id").isNull()).count()  # filas corruptas</code></pre>
+<pre><code>(df_twitter.groupBy("user").count().orderBy(F.desc("count")).limit(20).show())
+(df_twitter.select("sentiment", F.length("text").alias("length"))
+    .groupBy("sentiment").avg("length").show())</code></pre>
+<p>Si existe <code>date</code> con forma <code>Mon Apr 06 22:19:45 PDT 2009</code>, el taller recorta el día de la semana y parsea:</p>
+<pre><code>df_datetime = (df_twitter
+    .withColumn("date", F.substring("date", 5, 1000))
+    .withColumn("date", F.to_timestamp("date", "MMM dd HH:mm:ss zz yyyy"))
+    .persist())</code></pre>
+<h3>Limpieza, tokens y tópicos</h3>
+<div class="callout tip"><div class="lbl">[didáctico]</div>La primera mención es <code>regexp_extract</code> del grupo 1 de <code>@usuario</code>. Para la nube de palabras hay que tokenizar <strong>text_clean</strong>, no el <code>text</code> crudo: el Tokenizer del notebook de ML apunta a <code>text</code>, y las líneas de <code>groupBy("token").count()</code> a veces vienen comentadas. Sin ese conteo, el dict de la nube no existe.</div>
+<h3>Pipeline tweets (corregido)</h3>
+<div class="callout info"><div class="lbl">[clase/notebook]</div>Bloque reproducible: schema → top users → limpieza + <code>persist</code> → Tokenizer sobre <code>text_clean</code> → stops → explode → count. Archivo: <code>twitter_training.csv</code>.</div>
+<pre><code>from pyspark.sql import functions as F
+from pyspark.ml.feature import Tokenizer, StopWordsRemover
+
+PATH = "/content/twitter_training.csv"  # no traindata.csv
+schema = "id long, user string, sentiment string, text string"
+df = spark.read.csv(PATH, header=True, schema=schema)
+
+(df.groupBy("user").count().orderBy(F.desc("count")).limit(20).show(truncate=False))
+
+df_clean = (df
+    .withColumn("text_clean", F.regexp_replace("text", r"https?://[^\s]+", ""))
+    .withColumn("text_clean", F.regexp_replace("text_clean", r"@\w+", " "))
+    .withColumn("text_clean", F.regexp_replace("text_clean", r"[^\w\s]", " "))
+    .withColumn("text_clean", F.regexp_replace("text_clean", r"\s+", " "))
+    .withColumn("text_clean", F.lower(F.trim("text_clean")))
+    .filter(F.length("text_clean") &gt; 1)
+    .persist())
+
+tokenizer = Tokenizer(inputCol="text_clean", outputCol="tokens")
+stop = StopWordsRemover(inputCol="tokens", outputCol="filtered")
+tokens = tokenizer.transform(df_clean)
+filtered = stop.transform(tokens)
+word_counts = (filtered
+    .select(F.explode("filtered").alias("token"))
+    .groupBy("token").count().orderBy(F.desc("count")))
+word_counts.show(20)
+# wc_sample = word_counts.limit(500).toPandas()  # WordCloud</code></pre>
+<h3>Topic modeling (corregido)</h3>
+<p>Orden fijo: <strong>CountVectorizer</strong> (<code>rawFeatures</code>) → <strong>IDF</strong> (<code>vectors</code>) → <strong>LDA</strong> (<code>k</code> temas) → <code>describeTopics</code>. La calidad depende de la limpieza y de <code>vocabSize</code>.</p>
+<pre><code>from pyspark.ml.feature import CountVectorizer, IDF
+from pyspark.ml.clustering import LDA
+
+cv = CountVectorizer(inputCol="filtered", outputCol="rawFeatures", vocabSize=200, minDF=2)
+feat = cv.fit(filtered).transform(filtered)
+idf = IDF(inputCol="rawFeatures", outputCol="vectors")
+rescaled = idf.fit(feat).transform(feat)
+lda = LDA(k=10, maxIter=10, featuresCol="vectors")
+lda_model = lda.fit(rescaled)
+lda_model.describeTopics(10).show(truncate=False)</code></pre>
+<h3>Puente con el DWH</h3>
+<div class="callout info"><div class="lbl">[resumen]</div>Spark hace el <strong>ETL/ELT</strong>: lee crudo del data lake (S3 o HDFS), limpia, agrega y escribe al DWH o a tablas curadas. En un <strong>lakehouse</strong> consulta Parquet, Delta o Iceberg con ACID. También arma hechos y dimensiones (Kimball) a partir de lo ya procesado. El ELT moderno carga crudo al lago y transforma con Spark o dbt en el destino. Snowflake, BigQuery o Redshift pueden ocupar partes del pipeline; Spark sigue siendo el motor de preparación.</div>
+<div class="callout tip"><div class="lbl">[Fundamentals]</div>Un lake sin catálogo ni capa ACID degenera en <em>data swamp</em>. Preferí Parquet (no CSV) para schema-on-read; evitá miles de archivos diminutos (un PUT por fila). Un MERGE/CDC fila a fila sobre columnar es Copy-on-Write caro: loteá. Lambda (batch+stream duplicados) solo si hace falta; Kappa unifica en un stream con replay.</div>
+<div class="callout info"><div class="lbl">[quiz16]</div><strong>Medallón.</strong> Bronze = crudo con timestamp (inmutable). Silver = Spark limpia y tipa, escribe Parquet. Gold = agregados para BI/DWH. El log de transacciones (Delta/Iceberg) habilita cambios atómicos y time travel sobre el lago de archivos.</div>
+<table><tr><th>Tema</th><th>Idea para cuando el quiz mezcla modelo</th></tr>
+<tr><td>Bronze / Silver / Gold</td><td>Crudo → limpio → curado. Spark suele vivir en Silver.</td></tr>
+<tr><td>Inmon</td><td>DWH integrado, orientado a temas, histórico, no volátil.</td></tr>
+<tr><td>Kimball</td><td>Estrella o copo. La granularidad se define primero. Dimensiones conformadas.</td></tr>
+<tr><td>OLTP vs OLAP</td><td>Transacciones contra análisis agregado.</td></tr>
+<tr><td>ETL vs ELT</td><td>Transformar antes de cargar, o después, ya en el destino.</td></tr>
+<tr><td>SCD tipo 2</td><td>Una fila nueva conserva la historia. La llave subrogada identifica la versión.</td></tr>
+<tr><td>Lakehouse</td><td>Lago más transacciones ACID (Delta o Iceberg).</td></tr></table>
+<p>Esquema mental: <strong>fuentes → Spark → lake/Delta → DWH/BI</strong>, o un lakehouse único con SQL encima. Medidas: aditivas se suman en cualquier dimensión; semi-aditivas no en el tiempo (stock); no aditivas no se suman (ratios). Slice fija una dimensión; dice fija varias. Roll-up sube en la jerarquía; drill-down baja.</p>
+<div class="trade"><b>Trade-off 9 · Limpiar de más.</b> Ganas: tokens y tópicos legibles. Pierdes: menciones, URLs y signos que a veces eran la señal. Y sin <code>persist</code> sobre <code>df_clean</code>, cada acción repite toda la regex.</div>
+`,
+mini:{q:'ELT moderno, en el resumen, significa…', opts:['Transformar todo antes de cargar','Cargar crudo al lago y transformar con Spark o dbt en el destino','Borrar el DWH','Quedarse en OLTP'], a:1, why:'La carga cruda va al lago. Spark (o dbt) transforma ya en el destino.'} }
+];
+
+const QUIZ = [
+{tag:'CPU', c:'gold', q:'R y Python, en el contraste del notebook, usan por defecto…', opts:['Todos los núcleos','Un solo CPU aunque haya más','Solo la GPU','El cluster manager'], a:1, why:'El monitor del taller muestra un hilo en pandas y en numpy.'},
+{tag:'CPU', c:'gold', q:'Los dos límites al escalar que marca el taller son…', opts:['Licencias y red','Memoria (no cabe en RAM) y tiempo (baja latencia)','Solo el disco','Solo el driver'], a:1, why:'Si no cabe en RAM, o si la latencia no da, una máquina se queda corta.'},
+{tag:'Paralelo', c:'blue', q:'Procesamiento paralelo, en el sentido del notebook, es…', opts:['Siempre varias máquinas','Repartir el trabajo en los CPUs de una máquina','Solo MapReduce','Escribir en HDFS'], a:1, why:'Paralelo aprovecha los núcleos. Distribuido es cuando esas tareas cambian de computadora.'},
+{tag:'Paralelo', c:'blue', q:'Procesamiento distribuido es…', opts:['Lo contrario de cualquier paralelismo','Paralelismo cuyas tareas corren en distintas computadoras del clúster','Un solo hilo','Solo SQL'], a:1, why:'Es un subconjunto del paralelismo, no otro universo.'},
+{tag:'Paralelo', c:'blue', q:'Si cae el único nodo de un master local[*]…', opts:['Otro datacenter retoma el linaje solo','Cae el proceso entero','Solo se pierde un executor y el driver sigue en otra máquina','AQE lo evita'], a:1, why:'local no es un clúster. La tolerancia a un executor caído aparece cuando hay varios nodos.'},
+{tag:'Spark', c:'purple', q:'Spark es más rápido que MapReduce en iteraciones porque…', opts:['Persiste cada paso en disco','Mantiene los intermedios en memoria','No tiene shuffle','Solo corre en un CPU'], a:1, why:'MapReduce escribe disco entre map y reduce. Spark evita ese viaje cuando la RAM alcanza.'},
+{tag:'Spark', c:'purple', q:'Como sistema, Spark es…', opts:['Un almacén equivalente a HDFS','Un motor de procesamiento: lee HDFS, S3, JDBC, Kafka o Parquet','Una base OLTP','El reemplazo de todos los metadatos de Hadoop'], a:1, why:'No es almacenamiento. El dato vive en otro sistema.'},
+{tag:'Spark', c:'purple', q:'Correr Spark sobre Hadoop significa sobre todo…', opts:['Borrar HDFS','Usar YARN + HDFS y reemplazar MapReduce como motor de cómputo','Que Spark es HDFS','Eliminar el driver'], a:1, why:'Se sustituye el motor, no necesariamente todo el ecosistema.'},
+{tag:'Spark', c:'purple', q:'Motor unificado quiere decir…', opts:['Solo batch','Batch, SQL, streaming, ML y grafos en el mismo motor','Solo RDD','Solo Python'], a:1, why:'Una sola máquina de ejecución para esas modalidades.'},
+{tag:'Stack', c:'teal', q:'Spark Core se encarga de…', opts:['Solo PageRank','Scheduling, memoria, fallos y RDD','Solo el catálogo Delta','El BI del DWH'], a:1, why:'Es la base. SQL, grafos y ML se apoyan ahí.'},
+{tag:'Stack', c:'teal', q:'Quién convierte el programa en DAG y coordina las stages…', opts:['Cada executor por su cuenta','El driver','El archivo Parquet','StopWordsRemover'], a:1, why:'El driver planifica. Los executors ejecutan.'},
+{tag:'Stack', c:'teal', q:'El cluster manager…', opts:['Guarda los Parquet','Asigna recursos (Standalone, YARN o Kubernetes)','Ejecuta el SQL línea a línea en Python','Es el shuffle'], a:1, why:'Reparte CPU y memoria. Mesos queda como nota deprecada.'},
+{tag:'Stack', c:'teal', q:'En modo cluster el driver…', opts:['Vive en el laptop de quien lanzó el notebook','Corre dentro del clúster','No existe','Es un executor sin tasks'], a:1, why:'client lo deja en tu máquina. cluster lo mueve adentro. local lo mete todo en una JVM.'},
+{tag:'Stack', c:'teal', q:'Los executors…', opts:['Solo dibujan el DAG','Ejecutan tasks, guardan cache y reportan al driver','Son el cluster manager','Infieren el esquema dos veces'], a:1, why:'Trabajo y caché local. La coordinación no es de ellos.'},
+{tag:'Sesion', c:'orange', q:'La regla de oro de PySpark dice que…', opts:['Todo corre dentro del intérprete, fila a fila','El procesamiento va en otro entorno: piensa en ejecución remota, incluso con local[*]','collect es la forma correcta de traer millones de filas','Las UDF son siempre más rápidas que Spark SQL'], a:1, why:'local[*] no cancela la regla. El plan igual lo ejecuta el motor.'},
+{tag:'Sesion', c:'orange', q:'collect() sobre un dataset grande…', opts:['Deja los datos en los executors','Trae todo al driver y puede tumbarlo','Es una transformación lazy','Equivale a cache()'], a:1, why:'El driver no es un almacén. Para mirar, limit o una muestra.'},
+{tag:'Sesion', c:'orange', q:'Una UDF de Python frente a una función nativa de Spark SQL suele ser…', opts:['Más rápida','Más lenta','Obligatoria para filter','Una transformación narrow'], a:1, why:'Sale del código generado de Catalyst. Úsala cuando no haya función nativa.'},
+{tag:'Quirk', c:'orange', q:'En el Colab, si el apt de OpenJDK 8 falla pero JAVA_HOME apunta a Java 21…', opts:['Spark no puede arrancar nunca','Puede funcionar con Java 21 si Spark ya está descomprimido','Hay que volver a pandas','Hay que borrar SPARK_HOME'], a:1, why:'El taller queda en Java 21. Forzar Java 8 solo si el runtime lo pide.'},
+{tag:'DF', c:'pink', q:'Declarar el esquema al leer un CSV…', opts:['Obliga una segunda pasada para adivinar tipos','Evita la doble pasada de inferSchema y el "todo string"','Desactiva Catalyst','Crea un shuffle'], a:1, why:'inferSchema recorre el archivo para adivinar. El esquema declarado no.'},
+{tag:'DF', c:'pink', q:'En una expresión de columnas con aritmética, la forma preferida es…', opts:['El atributo df.col cuando el nombre tiene espacios','F.col','toPandas en cada fila','collect y un for'], a:1, why:'El string y el atributo alcanzan para un nombre simple. F.col aguanta la expresión.'},
+{tag:'DF', c:'pink', q:'createOrReplaceTempView…', opts:['Publica la tabla en el DWH para siempre','Crea una vista solo de esa sesión, sobre el mismo Catalyst','Escribe Parquet','Materializa el resultado en disco'], a:1, why:'Se va con la sesión. El SQL y el DataFrame comparten optimizador.'},
+{tag:'DF', c:'pink', q:'En PySpark, la API recomendada hoy es…', opts:['RDD para todo','DataFrame. El Dataset tipado es de Scala o Java','Solo SQL, sin DataFrame','Solo pandas'], a:1, why:'El RDD no pasa por Catalyst. El Dataset tipado no es el modelo de Python.'},
+{tag:'Lazy', c:'gold', q:'select, filter o groupBy…', opts:['Ejecutan el job al instante','Construyen el plan y esperan una acción','Siempre hacen shuffle','Llaman a spark.stop()'], a:1, why:'Son transformaciones. La acción es el gatillo.'},
+{tag:'Lazy', c:'gold', q:'¿Cuál de estas es una acción?', opts:['select','withColumn','count','filter'], a:2, why:'count pide un resultado. Las otras tres alargan el plan.'},
+{tag:'Lazy', c:'gold', q:'where y filter en un DataFrame…', opts:['where es wide y filter es narrow siempre','Son alias','where solo existe dentro de un string SQL','filter borra el linaje'], a:1, why:'Mismo método con dos nombres.'},
+{tag:'Lazy', c:'gold', q:'explain() en el taller sirve para…', opts:['Disparar el write','Ver el plan físico; explain(True) añade lógico, optimizado y físico','Hacer cache','Elegir el cluster manager'], a:1, why:'Muestra el plan. No sustituye a show, count o write.'},
+{tag:'Shuffle', c:'blue', q:'Una transformación narrow…', opts:['Siempre cruza la red','Hace que cada partición de salida dependa de una de entrada, sin shuffle','Es solo groupBy','Es solo orderBy'], a:1, why:'map, filter, select y un withColumn simple son narrow. groupBy y orderBy son wide.'},
+{tag:'Shuffle', c:'blue', q:'La fórmula del resumen es…', opts:['1 transformación = 1 stage','1 acción = 1 job; stages entre shuffles; tasks por partición','1 executor = 1 job','1 cache = 1 DAG'], a:1, why:'El shuffle es la frontera de stage. La task suele ser una partición.'},
+{tag:'Shuffle', c:'blue', q:'coalesce(n) frente a repartition(n)…', opts:['coalesce sube particiones con shuffle','coalesce solo baja particiones y evita un shuffle completo','Son idénticos','coalesce es un broadcast'], a:1, why:'Para subir o rebalancear de verdad, repartition. Para bajar al final, coalesce.'},
+{tag:'Shuffle', c:'blue', q:'persist() sin argumentos usa por defecto… y cache() equivale a…', opts:['DISK_ONLY y MEMORY_AND_DISK','MEMORY_AND_DISK y persist(MEMORY_ONLY)','Solo GPU y solo disco','Ninguno guarda nada'], a:1, why:'El taller persiste tweets con el default de persist. cache es la variante solo memoria.'},
+{tag:'Opt', c:'purple', q:'Catalyst…', opts:['Ejecuta bytes off-heap','Optimiza el plan: pushdown, column pruning y plan físico','Reparte chunks','Tokeniza tweets'], a:1, why:'Tungsten es la ejecución. Catalyst es el optimizador. AQE reoptimiza después.'},
+{tag:'Opt', c:'purple', q:'AQE…', opts:['Se apaga al leer CSV','Reoptimiza en runtime con estadísticas reales, por ejemplo el join tras el shuffle','Es un formato de archivo','Reemplaza al driver'], a:1, why:'Usa tamaños medidos, no solo los estimados del plan inicial.'},
+{tag:'Opt', c:'purple', q:'Un broadcast join conviene cuando…', opts:['Las dos tablas son enormes','Una tabla es pequeña y se copia a los executors','Hay que hacer repartition(1)','Se usa un RDD sin esquema'], a:1, why:'Típico en estrella: dimensión chica, hechos grandes, sin shuffle de los hechos.'},
+{tag:'Opt', c:'purple', q:'Parquet se prefiere a CSV en Spark porque…', opts:['Es más fácil de leer en un editor de texto','Es columnar, comprimido, y permite predicate pushdown','No tiene tipos','Obliga un shuffle'], a:1, why:'CSV parsea todo. Parquet lee las columnas que el plan pide.'},
+{tag:'Texto', c:'teal', q:'El CSV de tweets que abre el código (no el markdown) se llama…', opts:['traindata.csv','twitter_training.csv','california_housing_train.csv','ejemplo_escritura_1.csv'], a:1, why:'El markdown dice traindata.csv. El código usa twitter_training.csv.'},
+{tag:'Texto', c:'teal', q:'Para una nube de palabras coherente hay que tokenizar…', opts:['La columna text original, sin limpiar','text_clean, y luego stops, explode y groupBy count','Solo el id','El sentiment, y LDA antes del Tokenizer'], a:1, why:'Tokenizer sobre text crudo arrastra URLs. Sin el count no hay frecuencias.'},
+{tag:'Texto', c:'teal', q:'El orden del modelado de tópicos en el taller es…', opts:['LDA, luego IDF, luego Tokenizer','CountVectorizer, IDF, LDA','StopWords antes de leer el CSV','explode antes del Tokenizer'], a:1, why:'Bolsa de palabras, peso IDF, y recién entonces LDA con k temas.'},
+{tag:'DWH', c:'gold', q:'En el puente del resumen, el papel típico de Spark es…', opts:['Reemplazar el modelo estrella por un OLTP','ETL o ELT del lago hacia tablas curadas, o consultar un lakehouse','Ser el almacén definitivo de los tweets en RAM','Eliminar la granularidad de Kimball'], a:1, why:'Prepara y transforma. El almacenamiento sigue siendo lago, Delta o el DWH.'},
+{tag:'Shuffle', c:'blue', q:'Para sumar montos por clave, groupByKey().map(sum) frente a reduceByKey…', opts:['Es igual de barato en red','Manda todos los valores crudos y puede OOM','Evita el shuffle por completo','Solo corre en el driver'], a:1, why:'[Learning Spark] reduceByKey hace combine local antes del shuffle. groupByKey no.'},
+{tag:'Lazy', c:'gold', q:'Si solo haces filter/select y print("listo") sin count/show/write…', opts:['Spark ya leyó el archivo entero','No se ejecutó nada: solo creció el plan lazy','Obligas un shuffle','Se dispara un job vacío'], a:1, why:'[Learning Spark] Sin acción no hay stages ni lectura. El print engaña.'},
+{tag:'Shuffle', c:'blue', q:'Tras repartition/partitionBy de un dataset que reusas, si omites persist…', opts:['El shuffle queda materializado para siempre','Cada acción puede rehacer el shuffle desde el linaje','Catalyst lo cachea solo','coalesce deja de funcionar'], a:1, why:'[Learning Spark] partitionBy/repartition son lazy. Sin persist, cada acción reevalúa.'},
+{tag:'Opt', c:'purple', q:'Un lago con CSV crudo + SELECT * pay-per-scan suele…', opts:['Aprovechar column pruning automáticamente','Romperse con cambios de esquema y disparar facturas altas','Dar ACID gratis','Ser el formato preferido de Catalyst'], a:1, why:'[Fundamentals] Schema-on-read con CSV es frágil; SELECT * anula pruning. Prefiere Parquet/particionado.'},
+{tag:'Opt', c:'purple', q:'Si Parquet anota en el pie "edad 18–35" y filtras edad > 50…', opts:['Spark descarga el bloque igual','Puede saltar el bloque sin leer los datos','Obliga un shuffle wide','Convierte el archivo a CSV'], a:1, why:'[quiz16] Stats del footer + predicate pushdown = block skipping.'},
+{tag:'DWH', c:'gold', q:'Carpetas /ventas/año=2026/mes=11/ en el lago sirven para…', opts:['Forzar un collect al driver','Que el WHERE por año/mes ignore el resto de carpetas','Reemplazar a Catalyst','Borrar Bronze cada noche'], a:1, why:'[quiz16] Partición física (Hive-style): menos archivos escaneados, menos costo.'},
+{tag:'DWH', c:'teal', q:'En el medallón, ¿quién limpia nulos y tipos hacia Parquet?', opts:['La capa Gold sola, sin motor','Silver, típicamente con Spark','Solo el POS','El cluster manager'], a:1, why:'[quiz16] Bronze aterriza; Silver limpia; Gold agrega para BI.'},
+{tag:'Lazy', c:'gold', q:'describe() en un DataFrame…', opts:['Es una transformación lazy que no lee datos','Es una acción de perfilado (count, mean, stddev, min, max)','Solo funciona sobre RDD sin esquema','Equivale a explain(True)'], a:1, why:'Dispara ejecución y resume columnas numéricas. No es un plan vacío.'},
+{tag:'Opt', c:'purple', q:'Broadcast variable, accumulator y broadcast join…', opts:['Son tres nombres del mismo mecanismo','Son distintos: lookup solo lectura; contador sumable; estrategia de join','Solo existen en MapReduce','Reemplazan a Catalyst'], a:1, why:'Variable broadcast ≠ broadcast join. Accumulator solo suma hacia el driver.'},
+{tag:'Opt', c:'purple', q:'La cadena de Catalyst, en orden, es…', opts:['Código → AQE → Tungsten → disco','Plan lógico → lógico optimizado → planes físicos → costos → codegen','Solo pushdown sin plan físico','RDD → Dataset → CSV'], a:1, why:'Optimiza el lógico, elige físico por costo y genera código. Tungsten lo ejecuta.'},
+{tag:'DF', c:'pink', q:'En el pipeline housing corregido, lo sano es…', opts:['Mezclar IntegerType y DoubleType en el schema del CSV','Leer con schema homogéneo (doubles) y castear a entero después','Usar solo collect para tipar','Inferir y nunca castear'], a:1, why:'El CSV trae doubles. Cast post-lectura evita nulos raros por tipos mezclados.'},
+{tag:'Shuffle', c:'blue', q:'MEMORY_AND_DISK (default de persist) conviene cuando…', opts:['Nunca reusas el DataFrame','El linaje es caro (limpieza + varias ramas) y la RAM puede no alcanzar','Solo querés un print','Querés borrar el shuffle'], a:1, why:'Guarda en RAM y derrama a disco. Si no cabe MEMORY_ONLY, no recomputás todo.'},
+{tag:'Opt', c:'purple', q:'Tungsten aporta sobre todo…', opts:['Tokenizar tweets','Memoria off-heap, formato binario y whole-stage codegen','El modo client','inferSchema'], a:1, why:'Es la capa de ejecución compacta. Catalyst decide el plan; Tungsten lo corre.'},
+{tag:'Stack', c:'teal', q:'Structured Streaming trata el stream como…', opts:['Un CSV estático sin tiempo','Una tabla que crece, procesada en micro-batches','Solo GraphX','Un accumulator'], a:1, why:'Misma idea de DataFrame/SQL sobre datos que llegan en lotes pequeños.'}
+];
+
+const CASES = [
+{ title:'Caso 1 · Java 8 que no instala', prompt:'En Colab la celda de openjdk-8 falla con 404 en apt, pero la siguiente fija JAVA_HOME en java-21-openjdk-amd64 y Spark ya está descomprimido. ¿Arrancas igual o reinsistes con Java 8?', solution:'<strong>Arranca con Java 21.</strong> El apt de Java 8 es un quirk del notebook, no un requisito si el runtime no lo exige. Revisa que <code>JAVA_HOME</code> y <code>SPARK_HOME</code> apunten a rutas reales y que <code>findspark.init()</code> corra antes de crear la sesión.', h1:'¿Qué variable lee el proceso de Java?', h2:'¿En qué orden van findspark y SparkSession?', rubric:'Rúbrica: 2 diagnóstico del quirk + 2 variables de entorno + 1 cuándo sí forzar Java 8.'},
+{ title:'Caso 2 · El CSV que no aparece', prompt:'El markdown del taller dice abrir /content/traindata.csv. FileNotFoundError. El archivo que subiste se llama twitter_training.csv. ¿Qué haces?', solution:'<strong>Usa el nombre del código:</strong> <code>/content/twitter_training.csv</code>. El markdown está desfasado. La otra opción es renombrar el archivo al subirlo. El esquema sigue siendo <code>id long, user string, sentiment string, text string</code>, no inferSchema.', h1:'¿Por qué inferSchema falla en este CSV?', h2:'¿Qué cuenta una fila con id nulo?', rubric:'Rúbrica: 2 nombre correcto + 2 esquema explícito + 1 filas corruptas.'},
+{ title:'Caso 3 · collect de los tweets', prompt:'Quieres ver "todos" los tweets en una variable Python y escribes df_twitter.collect() sobre ~1,6 millones de filas. El driver se queda sin memoria. ¿Qué rompiste y qué usas en su lugar?', solution:'<strong>La regla de oro.</strong> collect trae el dataset completo al proceso del driver. Para inspeccionar: <code>show</code>, <code>limit</code> o un <code>toPandas()</code> de una muestra chica (la nube puede ir con <code>word_counts.limit(500)</code>). Las agregaciones se quedan en el clúster.', h1:'¿Dónde corre el procesamiento?', h2:'¿Qué diferencia hay entre show y collect?', rubric:'Rúbrica: 2 regla de oro + 2 alternativa + 1 por qué el driver no es un almacén.'},
+{ title:'Caso 4 · Un solo CSV o diez Parquet', prompt:'Vas a entregar housing. Alguien pide "un archivo que pueda abrir" y otra persona va a releerlo con Spark. Tienes repartition(1).csv y repartition(10).parquet. ¿Cuál eliges para cada quien?', solution:'<strong>repartition(1)</strong> y CSV: un solo archivo, fácil para un humano, pésimo para paralelismo. <strong>repartition(10)</strong> y Parquet: varios archivos columnares, mejor lectura distribuida y predicate pushdown. No uses el de un archivo como formato de producción.', h1:'¿repartition hace shuffle?', h2:'¿Por qué Parquet gana al CSV en el scan?', rubric:'Rúbrica: 2 efecto de repartition(1) + 2 Parquet + 1 cuándo coalesce bastaría.'},
+{ title:'Caso 5 · Nulos raros en total_rooms', prompt:'El StructType de housing declara total_rooms como IntegerType y el resto como DoubleType. Tras el read aparecen nulos donde el CSV trae números con decimal, o columnas corridas. ¿Cómo lo corriges?', solution:'<strong>Esquema homogéneo en la lectura</strong> (todo double, como el CSV real) y el cast a entero después, en el select, con alias. La otra vía es <code>inferSchema=True</code> más un cast explícito. Mezclar tipos en el schema del CSV no "redondea": descarta o desplaza.', h1:'¿Qué evita declarar el esquema, además de los tipos?', h2:'¿Dónde hace el cast el pipeline corregido?', rubric:'Rúbrica: 2 causa + 2 esquema double + 1 cast posterior.'},
+{ title:'Caso 6 · La nube sin frecuencias', prompt:'El Tokenizer apunta a text, las líneas de groupBy("token").count() están comentadas, y el WordCloud espera un dict count que no existe. ¿Qué pipeline dejas?', solution:'Limpia a <code>text_clean</code> (URLs, menciones, signos, minúsculas) y <code>persist</code>. Tokenizer sobre <code>text_clean</code>, StopWordsRemover, <code>explode</code>, y <strong>groupBy token + count</strong> ordenado. Recién una muestra con <code>limit</code> puede bajar a pandas para dibujar.', h1:'¿Por qué no tokenizar text crudo?', h2:'¿Qué hace explode?', rubric:'Rúbrica: 2 text_clean + 2 explode/count + 1 persist si hay varias acciones.'},
+{ title:'Caso 7 · Hechos unidos a una dimensión chica', prompt:'Una tabla de hechos enorme se une a una dimensión de producto que cabe holgada en memoria. El plan muestra un shuffle de las dos. ¿Qué le pides a Spark y qué riesgo queda?', solution:'<strong>Broadcast</strong> de la dimensión: se copia a los executors y los hechos no viajan. Es el patrón estrella del resumen. El riesgo es declarar chica una tabla que no cabe: los executors se quedan sin memoria. AQE puede cambiar la estrategia al ver el tamaño real post-shuffle, pero no adivina si la dimensión ya no entra.', h1:'¿Qué optimizador reescribe el join?', h2:'¿Qué mide AQE que el plan inicial solo estima?', rubric:'Rúbrica: 2 broadcast + 2 hecho vs dimensión + 1 riesgo de memoria.'},
+{ title:'Caso 8 · La limpieza corre tres veces', prompt:'df_clean alimenta el top de usuarios ya calculado aparte, luego la nube y luego el LDA, sin persist. Cada acción tarda como si releyera y reaplicara la regex. ¿Qué falta y cuándo lo sueltas?', solution:'<code>persist()</code> (default MEMORY_AND_DISK) después del filtro de limpieza, porque hay varias acciones sobre el mismo linaje. <code>cache()</code> sería solo memoria. Al terminar el ML, <code>unpersist()</code> para no dejar la copia ocupando el executor.', h1:'¿Cuántos jobs dispara cada acción?', h2:'¿Qué default tiene persist() sin argumentos?', rubric:'Rúbrica: 2 por qué se recomputa + 2 persist vs cache + 1 unpersist.'},
+{ title:'Caso 9 · Suma por clave con groupByKey', prompt:'Tienes pares (producto_id, monto) de ~100 GB. Un compañero escribe groupByKey().mapValues(sum). La red se satura y un executor hace OOM en un producto popular. ¿Qué pedís en su lugar y por qué?', solution:'<strong>[Learning Spark] reduceByKey</strong> (o aggregate/combine con reduce local) suma dentro de cada partición antes del shuffle. groupByKey manda listas crudas y materializa todas las ventas de esa clave en un nodo. En DataFrame: <code>groupBy("producto_id").sum("monto")</code> ya va por Catalyst con agregación parcial. <strong>Trade-off:</strong> reduceByKey exige asociatividad; groupByKey es más general y más caro.', h1:'¿Qué es el map-side combine?', h2:'¿Cuál es el equivalente DataFrame?', rubric:'Rúbrica: 2 diagnóstico + 2 reduceByKey/DF + 1 trade-off.'},
+{ title:'Caso 10 · MERGE cada 5 s sobre Parquet', prompt:'Un CDC dispara MERGE sobre tablas Parquet en S3 cada pocos segundos. El pipeline se atrasa horas y el cómputo se dispara. ¿Qué está pasando físicamente y qué cambiás?', solution:'<strong>[Fundamentals] Copy-on-Write:</strong> actualizar pocas filas reescribe archivos columnares enteros. Agrupa el MERGE en micro-lotes (minutos), compacta y VACUUM/optimize. No trates Parquet como un heap fila-a-fila de Postgres. <strong>Trade-off:</strong> latencia de frescura vs. costo de reescritura.', h1:'¿Por qué Parquet es inmutable a nivel archivo?', h2:'¿Qué problema de "archivos pequeños" aparece si insertás 1 fila por PUT?', rubric:'Rúbrica: 2 COW + 2 loteo + 1 trade-off.'},
+{ title:'Caso 11 · Contador vs diccionario vs join', prompt:'En un job querés (a) un mapa país→región de 2 KB en cada executor, (b) contar filas corruptas mientras leés, y (c) unir hechos a una dimensión de 50 MB. Un compañero propone “broadcast” para las tres. ¿Qué usás en cada una?', solution:'(a) <strong>Broadcast variable</strong>: lookup de solo lectura. (b) <strong>Accumulator</strong>: los executors solo suman; el driver lee el total. (c) <strong>Broadcast join</strong> de la dimensión (si cabe en cada executor). No son el mismo mecanismo: confundirlos en el examen es trampa típica del resumen.', h1:'¿Quién lee el accumulator?', h2:'¿Qué pasa si la “dimensión” de 50 MB en realidad pesa 5 GB?', rubric:'Rúbrica: 2 var vs join + 2 accumulator + 1 riesgo de memoria.'},
+{ title:'Caso 12 · Pipeline housing de cero', prompt:'Te piden reproducir el flujo housing sin abrir el markdown: leer CSV, tipar bien, SQL de promedio por edad, perfilar y escribir Parquet en 4 partes. Escribí el esqueleto mental.', solution:'Schema <strong>homogéneo double</strong> → <code>read.csv</code> → <code>select</code> con <code>cast(IntegerType)</code> + <code>struct(longitude,latitude).alias("location")</code> → <code>createOrReplaceTempView</code> + SQL (AVG por edad, filtro rooms) → <code>describe().show()</code> → <code>repartition(4).write.mode("overwrite").parquet(...)</code>. No mezcles Integer en el schema del CSV.', h1:'¿Por qué cast después y no en el StructType del CSV?', h2:'¿describe es transformación o acción?', rubric:'Rúbrica: 2 schema + 2 cast/SQL/describe + 1 write/repartition.'}
+];
+
+const GLOSSARY = [
+['CPU','Núcleo de cómputo. Pandas y numpy, por defecto, usan uno solo. (notebook)'],
+['RAM','Memoria para datos e intermedios. Si el dataset no cabe, el límite es de memoria. (notebook)'],
+['Procesamiento paralelo','Repartir el trabajo entre los CPUs de una máquina. (notebook)'],
+['Procesamiento distribuido','Paralelismo en el que las tareas corren en distintas computadoras del clúster. (notebook)'],
+['Apache Spark','Motor de procesamiento distribuido en memoria. No es un sistema de almacenamiento. (resumen)'],
+['MapReduce','Motor batch de Hadoop que persiste en disco entre map y reduce. (resumen)'],
+['Spark Core','Base del stack: scheduling, memoria, fallos y RDD. (notebook)'],
+['Spark SQL','DataFrames y SQL sobre el mismo Catalyst. (notebook)'],
+['GraphX','Biblioteca de grafos del stack (PageRank y similares). (notebook)'],
+['SparkML','Pipelines de ML del taller: clasificación, clustering, LDA. En código, pyspark.ml. (notebook)'],
+['Structured Streaming','Micro-batches: el stream se ve como una tabla que crece. (resumen)'],
+['Driver','Proceso que crea la SparkSession, arma el DAG y coordina stages y tasks. (resumen)'],
+['Executor','Proceso que ejecuta tasks, guarda cache y reporta al driver. (resumen)'],
+['Cluster manager','Asigna recursos: Standalone, YARN o Kubernetes. Mesos está deprecado. (resumen)'],
+['SparkSession','Punto de entrada de PySpark. Se cierra con spark.stop(). (notebook)'],
+['PySpark','API Python de Spark. El cómputo no corre dentro del bucle de Python. (notebook)'],
+['Regla de oro','Pensar en ejecución remota aunque el master sea local[*]. (notebook)'],
+['RDD','Colección distribuida, inmutable y lazy, con linaje. Sin Catalyst. (resumen)'],
+['DataFrame','Tabla con columnas nombradas y tipadas. API recomendada en PySpark. (resumen)'],
+['Dataset','DataFrame tipado de Scala o Java. También pasa por Catalyst. (resumen)'],
+['Transformación','Operación lazy que alarga el plan: select, filter, join, groupBy. (resumen)'],
+['Acción','Operación que dispara un job: show, count, collect, write. (resumen)'],
+['Narrow','La partición de salida depende de una sola de entrada. Sin shuffle. (resumen)'],
+['Wide','La salida depende de muchas particiones. Hay shuffle. (resumen)'],
+['Shuffle','Redistribución por red o disco. Es la operación cara y la frontera de stage. (resumen)'],
+['reduceByKey','Agregación por clave con combine local antes del shuffle; más barata que groupByKey. (Learning Spark)'],
+['groupByKey','Agrupa todos los valores por clave sin combine local; caro en red y RAM. (Learning Spark)'],
+['Copy-on-Write','Al actualizar, se reescribe el archivo columnar entero; loteá MERGEs. (Fundamentals)'],
+['Stage','Tramo del job entre dos shuffles. (resumen)'],
+['Job','Unidad que dispara una acción. (resumen)'],
+['Task','Unidad de trabajo de una stage, en lo típico una por partición. (resumen)'],
+['DAG','Grafo de transformaciones que el driver construye antes de ejecutar. (resumen)'],
+['Linaje','Historia de transformaciones con la que se reconstruye una partición perdida. (resumen)'],
+['repartition','Cambia el número de particiones hacia arriba o abajo, con shuffle. (resumen)'],
+['coalesce','Solo reduce particiones, sin un shuffle completo. (resumen)'],
+['cache','Atajo de persist(MEMORY_ONLY). (resumen)'],
+['persist','Guarda el DataFrame para reutilizarlo. Sin argumentos: MEMORY_AND_DISK. (notebook)'],
+['Catalyst','Optimizador: predicate pushdown, column pruning y plan físico. (resumen)'],
+['Tungsten','Ejecución eficiente: memoria off-heap y código generado. (resumen)'],
+['AQE','Reoptimización en runtime con estadísticas reales. (resumen)'],
+['Broadcast join','Copia una tabla pequeña a los executors para no shufflear la grande. (resumen)'],
+['Broadcast variable','Dato de solo lectura enviado una vez a cada nodo (lookup). No es el broadcast join. (resumen)'],
+['Accumulator','Contador al que los executors solo suman; el driver lo lee. (resumen)'],
+['describe','Acción de perfilado: count, mean, stddev, min, max de columnas numéricas. (notebook)'],
+['MEMORY_ONLY','Nivel de persist (= cache): solo RAM. Si no cabe, se pierde la partición y se recomputa. (resumen)'],
+['MEMORY_AND_DISK','Default de persist(): RAM y el resto a disco. Ideal si el linaje es caro. (notebook)'],
+['DISK_ONLY','Persist solo en disco: útil con RAM justa y recomputo muy caro. (resumen)'],
+['Parquet','Formato columnar comprimido. El preferido para leer y escribir en Spark. (resumen)'],
+['Delta Lake','Capa ACID y time travel sobre Parquet. Pieza de un lakehouse. (resumen)'],
+['Medallón','Bronze crudo, Silver limpio (Spark), Gold curado para BI. (quiz16)'],
+['Block skipping','Saltar bloques de Parquet gracias a min/max en el footer. (quiz16)'],
+['Tokenizer','Parte una columna de texto en una lista de palabras. En el taller, sobre text_clean. (notebook)'],
+['StopWordsRemover','Quita artículos y preposiciones de esa lista de tokens. (notebook)'],
+['LDA','Modelo de tópicos no supervisado. Va después de CountVectorizer e IDF. (notebook)'],
+['Lakehouse','Lago de archivos (Parquet) más transacciones ACID, consultable con SQL. (resumen)'],
+['Predicate pushdown','Empujar el filtro al lector, para no traer bloques que no pasan el WHERE. (resumen)'],
+['UDF','Función Python registrada en Spark. Más lenta que una función nativa de Spark SQL. (notebook)'],
+['collect','Acción que trae todas las filas al driver. Peligrosa en datasets grandes. (notebook)'],
+['explain','Muestra el plan. explain(True) añade lógico, optimizado y físico. (notebook)'],
+['ETL','Transformar antes de cargar al destino analítico. (resumen)'],
+['ELT','Cargar crudo y transformar en el destino, con Spark o dbt. (resumen)'],
+['Inmon','DWH integrado, orientado a temas, histórico y no volátil. (resumen)'],
+['Kimball','Modelado dimensional: granularidad primero, estrella o copo, dimensiones conformadas. (resumen)']
+];
+
+const CHEATSHEET = `
+<div class="card accent-gold"><h3 style="margin-top:0;">Fundamentos</h3><p style="font-size:14px;">Spark &gt; MapReduce en iteraciones por <strong>memoria</strong>. Stack: Core, SQL, GraphX, SparkML/MLlib, Structured Streaming. Roles: <strong>driver</strong> (DAG), <strong>CM</strong> (YARN/K8s/Standalone), <strong>executors</strong>. Modos: local / client / cluster. <strong>No es BD ni almacén</strong>. Un CPU por defecto en pandas; límites RAM y tiempo.</p></div>
+<div class="card accent-blue"><h3 style="margin-top:0;">RDD, ejecución, rendimiento</h3><p style="font-size:14px;"><strong>Resiliente</strong> = linaje (no hace falta replicar). Transformaciones lazy vs acciones. Narrow vs wide; shuffle = frontera de stage. <strong>1 acción = 1 job → stages → tasks</strong>. <code>repartition</code> (shuffle) vs <code>coalesce</code> (solo baja). <code>cache</code>=MEMORY_ONLY; <code>persist</code>=MEMORY_AND_DISK; también DISK_ONLY. <code>unpersist</code> al terminar.</p></div>
+<div class="card accent-pink"><h3 style="margin-top:0;">APIs y optimización</h3><p style="font-size:14px;">RDD sin Catalyst; <strong>DataFrame</strong> en PySpark; Dataset tipado = Scala/Java. <strong>Catalyst</strong>: lógico → optimizado (pushdown, pruning) → físicos → costos → codegen. <strong>Tungsten</strong>: off-heap + whole-stage. <strong>AQE</strong>: stats reales. Broadcast join ≠ broadcast var ≠ accumulator.</p></div>
+<div class="card accent-purple"><h3 style="margin-top:0;">Formatos y arquitectura</h3><p style="font-size:14px;"><strong>Parquet</strong> (columnar, pushdown, block skipping) &gt; CSV. ORC (Hive), Avro (filas/streaming), Delta/Iceberg/Hudi (ACID, lakehouse). Spark en ETL/ELT, data lake, lakehouse y hacia el DWH. Medallón: Bronze → Silver (Spark) → Gold.</p></div>
+<div class="card accent-orange"><h3 style="margin-top:0;">PySpark práctico</h3><p style="font-size:14px;">Regla de oro: ejecución remota. <code>SparkSession</code> + <code>stop()</code>. Schema string/StructType; cast post-lectura; <code>F.col</code>/alias; filter=where; temp view + SQL; <code>explain</code>; <code>describe</code>; <code>groupBy</code>+<code>agg</code>; write + repartition. Housing: doubles → cast → struct location → Parquet. Tweets: schema, regex, Tokenizer(<code>text_clean</code>), CV→IDF→LDA.</p></div>
+<div class="card accent-teal"><h3 style="margin-top:0;">Quirks (trampas)</h3><p style="font-size:14px;">Java 8 apt 404 → <strong>JAVA_HOME 21</strong> funciona. Archivo real: <code>twitter_training.csv</code> (no traindata). Celdas “Escriba aquí” con solución abajo. Schema housing mezclado → nulos. Tokenizer sobre <code>text</code> crudo rompe la nube. Sin <code>groupBy(token).count()</code> no hay WordCloud.</p></div>
+`;
+
+/* ---- Glossary tip bubbles ---- */
+const $ = s => document.querySelector(s);
+function enhanceTips(){}
+const PAPER_SHUFFLE_ID = 'spark';
+function hashSeedStr(str){ let h=2166136261; for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
+function seededRandom(seed){ let s=seed>>>0; return ()=>{ s=(Math.imul(s,1664525)+1013904223)>>>0; return s/4294967296; }; }
+function prepareShuffledMCQ(opts,correctIndex,seedKey){ const indices=opts.map((_,i)=>i); const rand=seededRandom(hashSeedStr(seedKey)); for(let i=indices.length-1;i>0;i--){ const j=Math.floor(rand()*(i+1)); [indices[i],indices[j]]=[indices[j],indices[i]]; } return { opts:indices.map(ix=>opts[ix]), a:indices.indexOf(correctIndex) }; }
+function shuffledQuizItem(qi){ const q=QUIZ[qi]; return prepareShuffledMCQ(q.opts,q.a,PAPER_SHUFFLE_ID+'|quiz|'+qi); }
+function shuffledMini(m){ return prepareShuffledMCQ(m.mini.opts,m.mini.a,PAPER_SHUFFLE_ID+'|mini|'+m.id); }
+const MODULE_ANIMS = {
+  m0: [{id:'anim-cpu', label:'CPU, RAM y límites'}],
+  m1: [{id:'anim-cpu', label:'Un CPU vs muchos núcleos'}],
+  m3: [{id:'anim-arch', label:'Driver, executors, CM'}],
+  m6: [{id:'anim-lazy', label:'Lazy: plan y acción'}],
+  m7: [{id:'anim-shuffle', label:'Narrow, wide y shuffle'}],
+  m8: [{id:'anim-pipeline', label:'Catalyst, AQE, Parquet'}],
+  m9: [{id:'anim-tokens', label:'Tweets, tokens y LDA'}]
+};
 const QUIZ_MODULE_HINT = {
   'CPU':'m0', 'Paralelo':'m1', 'Spark':'m2', 'Stack':'m3',
   'Sesion':'m4', 'Quirk':'m4', 'DF':'m5', 'Lazy':'m6',

@@ -62,6 +62,13 @@ html: `
 <tr><td><strong>client</strong></td><td>Driver en la máquina de quien lanza el trabajo (notebook, IDE).</td></tr>
 <tr><td><strong>cluster</strong></td><td>Driver dentro del clúster.</td></tr></table>
 <div class="callout tip"><div class="lbl">[didáctico]</div>Mnemotecnia: <strong>driver piensa, CM reparte, executor trabaja</strong>. Si el driver está en tu laptop (client) y cierras la sesión, el trabajo se queda sin coordinador.</div>
+<pre><code>         Driver (SparkSession, DAG, stages/tasks)
+              │
+   ┌──────────┼──────────┐
+   ▼          ▼          ▼
+Executor   Executor   Executor   ← tasks + cache
+              ▲
+       Cluster Manager (Standalone | YARN | K8s)</code></pre>
 <div class="trade"><b>Trade-off 3 · client vs cluster.</b> Ganas en client: ves logs y depuras desde el notebook. Pierdes: el driver compite con tu máquina y un corte de red tumba el job.</div>
 `,
 mini:{q:'¿Quién convierte el programa en un DAG?', opts:['Cada executor','El driver','El archivo Parquet','El Tokenizer'], a:1, why:'El driver planifica. Los executors ejecutan tasks.'} },
@@ -129,7 +136,43 @@ spark.sql("SELECT housing_median_age FROM Housing LIMIT 10").show()</code></pre>
 <tr><td>Hoy en PySpark</td><td>Legado</td><td><strong>La API a usar</strong></td><td>No es el camino Python</td></tr></table><div class="callout info"><div class="lbl">[resumen]</div>En Scala, <code>DataFrame = Dataset[Row]</code>. El Dataset tipado solo existe en Scala/Java. En PySpark el camino es el DataFrame.</div>
 <div class="callout warn"><div class="lbl">[clase/notebook]</div><strong>Quirk de tipos.</strong> Un ejemplo del notebook mezcla <code>IntegerType</code> en <code>total_rooms</code> con <code>DoubleType</code> en otras columnas. Si el header no calza, aparecen nulos raros. Mejor un esquema homogéneo (todo double en la lectura) y el cast explícito después, o <code>inferSchema=True</code> más un cast.</div>
 <div class="trade"><b>Trade-off 5 · inferSchema vs esquema declarado.</b> Ganas con inferir: una línea y a explorar. Pierdes: una pasada extra y tipos adivinados. En producción se declara.</div>
-<h3>Pipeline housing (corregido)</h3><pre><code>df_conv.repartition(4).write.mode(overwrite).parquet(output/housing_parquet)</code></pre>
+<h3>Pipeline housing (corregido)</h3>
+<div class="callout info"><div class="lbl">[clase/notebook]</div>Flujo completo del taller: schema homogéneo → cast a entero donde toca → columna <code>location</code> → SQL → <code>describe</code> → escritura Parquet.</div>
+<pre><code>from pyspark.sql import functions as F
+from pyspark.sql.types import StructType, StructField, DoubleType, IntegerType
+
+PATH = "./sample_data/california_housing_train.csv"
+schema = StructType([
+    StructField("longitude", DoubleType(), True),
+    StructField("latitude", DoubleType(), True),
+    StructField("housing_median_age", DoubleType(), True),
+    StructField("total_rooms", DoubleType(), True),
+    StructField("total_bedrooms", DoubleType(), True),
+    StructField("population", DoubleType(), True),
+    StructField("households", DoubleType(), True),
+    StructField("median_income", DoubleType(), True),
+    StructField("median_house_value", DoubleType(), True),
+])
+df = spark.read.csv(PATH, header=True, schema=schema)
+
+df_conv = df.select(
+    F.col("latitude"), F.col("longitude"),
+    F.col("housing_median_age").cast(IntegerType()).alias("housing_median_age"),
+    F.col("total_rooms").cast(IntegerType()).alias("total_rooms"),
+    F.col("total_bedrooms").cast(IntegerType()).alias("total_bedrooms"),
+    F.col("population").cast(IntegerType()).alias("population"),
+    F.col("households").cast(IntegerType()).alias("households"),
+    F.col("median_income"), F.col("median_house_value"),
+    F.struct("longitude", "latitude").alias("location"),
+)
+df_conv.createOrReplaceTempView("housing")
+spark.sql("""
+  SELECT housing_median_age, AVG(median_house_value) AS avg_value
+  FROM housing WHERE total_rooms &gt; 1000
+  GROUP BY housing_median_age ORDER BY housing_median_age DESC LIMIT 10
+""").show()
+df_conv.describe().show()
+(df_conv.repartition(4).write.mode("overwrite").parquet("output/housing_parquet"))</code></pre>
 `,
 mini:{q:'Una vista temporal creada con createOrReplaceTempView…', opts:['Queda publicada en el DWH','Vive solo en esa SparkSession','Escribe Parquet','Desactiva Catalyst'], a:1, why:'Misma sesión, mismo Catalyst que el API DataFrame. Al cerrar, desaparece.'} },
 { id:'m6', tag:'Módulo 6', accent:'gold', title:'Ejecución perezosa, map-reduce y acciones',
@@ -152,13 +195,28 @@ reduce(lambda x, y: x + y, map(lambda x: x**2, l))  # 338350</code></pre>
 <div class="callout info"><div class="lbl">[resumen]</div>La transformación alarga el plan. La acción lo ejecuta.</div>
 <table><tr><th>Transformaciones (lazy)</th><th>Acciones</th></tr>
 <tr><td><code>select</code>, <code>filter</code> / <code>where</code>, <code>withColumn</code>, <code>join</code>, <code>groupBy</code>, <code>distinct</code>, <code>flatMap</code>, <code>union</code></td><td><code>show</code>, <code>count</code>, <code>collect</code>, <code>take</code>, <code>first</code>, <code>reduce</code>, <code>saveAsTextFile</code>, <code>write</code></td></tr></table>
-<p><code>where</code> y <code>filter</code> son <strong>alias</strong>. <code>describe()</code> devuelve count, mean, stddev, min y max de las columnas numéricas: es una acción de perfilado. Un <code>groupBy</code> con agregación y clave distinta es una transformación <strong>wide</strong> (hay shuffle).</p>
+<h3>Conversión de tipos (map sobre columnas)</h3>
+<div class="callout info"><div class="lbl">[clase/notebook]</div>El “map” del taller es un <code>select</code> con <code>.cast</code> y a veces un <code>struct</code>. No hace falta un RDD para tipar columnas.</div>
+<pre><code>from pyspark.sql.types import IntegerType
+df_conversion = df.select(
+    "latitude", "longitude",
+    df.housing_median_age.cast(IntegerType()),
+    df.total_rooms.cast("int"),
+    F.struct("longitude", "latitude").alias("location"),
+)</code></pre>
+<h3>Filtros, describe y agregaciones</h3>
+<p><code>where</code> y <code>filter</code> son <strong>alias</strong>. <code>describe()</code> es una <strong>acción</strong> de perfilado: count, mean, stddev, min y max de columnas numéricas. Un <code>groupBy</code> con agregación y clave distinta es una transformación <strong>wide</strong> (hay shuffle).</p>
 <pre><code>df_conversion.select("median_income").where("total_rooms &gt; 5000").show()
 df_conversion.filter(F.col("total_rooms") &gt; 5000).count()
+df_conversion.where(F.col("location.longitude") &gt; -114.6).select("location").show()
+df_conversion.describe().show()
 (df_conversion.groupBy("housing_median_age")
     .agg(F.avg("median_house_value").alias("promedio_valor"),
          F.sum("median_income").alias("suma_ingreso"))
     .orderBy(F.desc("housing_median_age"))
+    .show())
+(df_conversion.groupBy("total_bedrooms")
+    .agg(F.avg("median_house_value"), F.sum("median_income"))
     .show())</code></pre>
 <div class="callout warn"><div class="lbl">[didáctico · Learning Spark]</div>Encadenar <code>filter</code>/<code>select</code> y hacer <code>print("listo")</code> <strong>sin acción</strong> no lee el archivo: solo alarga el plan. El error de ruta o de datos aparece en el <code>count</code>/<code>show</code>/<code>write</code>, no en la línea del filtro.</div>
 <div class="trade"><b>Trade-off 6 · Pereza.</b> Ganas: el motor ve el plan completo y tira trabajo inútil. Pierdes: el error de datos aparece en la acción, líneas después de donde escribiste el filtro.</div>
@@ -168,7 +226,7 @@ mini:{q:'¿Cuál de estas dispara la ejecución?', opts:['select','withColumn','
 summary:'Dónde está el shuffle, cómo se parten los jobs, y cuándo persistir.',
 html: `
 <p class="lede">El linaje permite rehacer una partición perdida. El shuffle es lo que parte ese grafo en stages y, de paso, lo que más cuesta.</p>
-<div class="callout info"><div class="lbl">[resumen]</div>Un RDD es <strong>resiliente</strong> (el linaje reconstruye cada partici, y por eso no hace falta replicar los datos);ón), <strong>distribuido</strong>, <strong>inmutable</strong> (cada transformación produce otro) y <strong>lazy</strong>. <strong>Narrow:</strong> una partición de salida depende de una de entrada (<code>map</code>, <code>filter</code>, <code>select</code>, <code>withColumn</code> simple): sin shuffle. <strong>Wide:</strong> la salida depende de muchas entradas (<code>groupBy</code>, <code>join</code>, <code>distinct</code>, <code>orderBy</code>, <code>repartition</code>): hay shuffle por red o disco.</div>
+<div class="callout info"><div class="lbl">[resumen]</div>Un RDD es <strong>resiliente</strong> (si se pierde una partición, el <strong>linaje</strong> la reconstruye; por eso no hace falta replicar los datos), <strong>distribuido</strong>, <strong>inmutable</strong> (cada transformación produce otro) y <strong>lazy</strong>. <strong>Narrow:</strong> una partición de salida depende de una de entrada (<code>map</code>, <code>filter</code>, <code>select</code>, <code>withColumn</code> simple): sin shuffle. <strong>Wide:</strong> la salida depende de muchas entradas (<code>groupBy</code>, <code>join</code>, <code>distinct</code>, <code>orderBy</code>, <code>repartition</code>): hay shuffle por red o disco.</div>
 <div class="callout tip"><div class="lbl">[didáctico]</div>Fórmula: <strong>1 acción = 1 job → N stages (cortados en cada shuffle) → M tasks (una por partición, en lo típico).</strong></div>
 <table><tr><th>Método</th><th>Particiones</th><th>Shuffle</th><th>Cuándo</th></tr>
 <tr><td><code>repartition(n)</code></td><td>Sube o baja</td><td>Sí</td><td>Balancear, o justo antes de una escritura pesada.</td></tr>
@@ -178,7 +236,11 @@ html: `
 df_join.repartition(10).write.mode("overwrite").parquet("ejemplo_escritura_1_parquet")
 df_cached = df_datetime.persist()  # MEMORY_AND_DISK
 df_cached.unpersist()</code></pre>
-<p><code>cache()</code> equivale a <code>persist(MEMORY_ONLY)</code>. <code>persist()</code> sin argumentos usa <code>MEMORY_AND_DISK</code>. Niveles: <code>MEMORY_ONLY</code>, <code>MEMORY_AND_DISK</code>, <code>DISK_ONLY</code>, entre otros. Tiene sentido cuando el mismo DataFrame alimenta varias ramas: limpieza de tweets, agregaciones y ML. Si no, Spark recomputa el linaje en cada acción.</p>
+<table><tr><th>Nivel</th><th>Qué guarda</th><th>Cuándo</th></tr>
+<tr><td><code>MEMORY_ONLY</code> (= <code>cache()</code>)</td><td>Solo RAM</td><td>Cabe holgado y se reusa varias veces.</td></tr>
+<tr><td><code>MEMORY_AND_DISK</code> (default de <code>persist()</code>)</td><td>RAM; el resto a disco</td><td>Recomputar es caro (limpieza de tweets, varias ramas).</td></tr>
+<tr><td><code>DISK_ONLY</code></td><td>Solo disco</td><td>RAM justa y el linaje es pesado.</td></tr></table>
+<p>Si no persistes y hay varias acciones, Spark recomputa el linaje cada vez. Al terminar: <code>unpersist()</code>.</p>
 <div class="callout info"><div class="lbl">[didáctico · Learning Spark]</div>En agregaciones por clave (RDD Pair o idea equivalente), preferí <code>reduceByKey</code> / <code>aggregate</code> con combine local frente a <code>groupByKey</code>+sumar: el primero reduce tráfico de red; el segundo manda listas crudas y puede OOM. Si particionas un dataset grande que reusas en varios joins, <code>repartition</code>/<code>partitionBy</code> + <code>persist</code>: sin persist, cada acción re-shufflea. Tras particionar, transformar solo el valor (<code>mapValues</code> en RDD) conserva el partitioner; un <code>map</code> genérico lo borra y el siguiente join vuelve a shufflear.</div>
 <div class="trade"><b>Trade-off 7 · Shuffle y caché.</b> Ganas con repartition: archivos balanceados. Pierdes: el movimiento de datos. Ganas con persist: no repites la limpieza. Pierdes: RAM (y disco, si el nivel lo permite) ocupada hasta el <code>unpersist</code>.</div>
 `,
@@ -188,11 +250,24 @@ summary:'Quién optimiza el plan, quién lo ejecuta, y por qué Parquet gana al 
 html: `
 <p class="lede">El DataFrame no se ejecuta "como lo escribiste". Catalyst lo reescribe, Tungsten lo corre apretado y AQE puede cambiar de opinión con los tamaños reales.</p>
 <table><tr><th>Motor</th><th>Qué hace</th></tr>
-<tr><td><strong>Catalyst</strong></td><td>Cadena: plan lógico -> plan lógico <strong>optimizado</strong> (predicate pushdown, column pruning) -> <strong>varios planes físicos</strong> -> elección por <strong>costos</strong> -> generación de código.</td></tr>ísico.</td></tr>
+<tr><td><strong>Catalyst</strong></td><td>Plan lógico → plan lógico <strong>optimizado</strong> (predicate pushdown, column pruning) → <strong>varios planes físicos</strong> → elección por <strong>costos</strong> → generación de código.</td></tr>
 <tr><td><strong>Tungsten</strong></td><td>Ejecución: memoria <strong>off-heap</strong>, formato binario compacto y <strong>whole-stage code generation</strong>.</td></tr>
 <tr><td><strong>AQE</strong></td><td>Reoptimiza <strong>en runtime</strong> con estadísticas reales (tamaño después del shuffle, otra estrategia de join).</td></tr></table>
 <div class="callout info"><div class="lbl">[resumen]</div>Si una tabla es pequeña, Spark puede <strong>difundirla</strong> a todos los executors y no shufflear la grande. El caso de libro es hechos unidos a una dimensión chica del modelo estrella.</div>
-<div class="callout info"><div class="lbl">[resumen]</div><strong>Variables compartidas:</strong> <em>broadcast variables</em> = variables de solo lectura enviadas una vez a cada nodo (no confundir con el broadcast join). <em>Accumulators</em> = variables a las que los executors solo suman (contadores); el driver las lee. El linaje del RDD permite recalcular una particion perdida: por eso no hace falta replicar los datos.</div>
+<div class="callout info"><div class="lbl">[resumen]</div><strong>Tres ideas distintas:</strong> (1) <em>broadcast join</em> = estrategia de join que copia la tabla chica; (2) <em>broadcast variable</em> = dato de solo lectura enviado una vez a cada nodo (lookup, diccionario); (3) <em>accumulator</em> = contador al que los executors solo suman y que el driver lee. No mezcles las tres.</div>
+<h3>Ejemplo del resumen (narrow → wide → acción)</h3>
+<pre><code>from pyspark.sql.functions import col, sum as _sum
+ventas = spark.read.parquet("s3://datos/ventas/")
+productos = spark.read.parquet("s3://datos/productos/")
+resultado = (ventas
+    .filter(col("anio") == 2025)                 # narrow
+    .join(productos, "producto_id")              # wide (o broadcast si es chica)
+    .groupBy("categoria")                        # wide → shuffle
+    .agg(_sum("monto").alias("total_ventas"))
+    .orderBy(col("total_ventas").desc()))
+resultado.show()                                 # ACCIÓN → se ejecuta todo
+ventas.createOrReplaceTempView("ventas")
+spark.sql("SELECT categoria, SUM(monto) FROM ventas GROUP BY categoria").show()</code></pre>
 <table><tr><th>Formato</th><th>Naturaleza</th><th>Notas</th></tr>
 <tr><td>CSV / JSON</td><td>Texto</td><td>Interoperables. El parseo es caro y los tipos son débiles.</td></tr>
 <tr><td><strong>Parquet</strong></td><td>Columnar comprimido</td><td>El preferido en Spark. Entra el predicate pushdown.</td></tr>
@@ -225,23 +300,47 @@ df_twitter.where(F.col("id").isNull()).count()  # filas corruptas</code></pre>
     .persist())</code></pre>
 <h3>Limpieza, tokens y tópicos</h3>
 <div class="callout tip"><div class="lbl">[didáctico]</div>La primera mención es <code>regexp_extract</code> del grupo 1 de <code>@usuario</code>. Para la nube de palabras hay que tokenizar <strong>text_clean</strong>, no el <code>text</code> crudo: el Tokenizer del notebook de ML apunta a <code>text</code>, y las líneas de <code>groupBy("token").count()</code> a veces vienen comentadas. Sin ese conteo, el dict de la nube no existe.</div>
-<pre><code>df_clean = (df
+<h3>Pipeline tweets (corregido)</h3>
+<div class="callout info"><div class="lbl">[clase/notebook]</div>Bloque reproducible: schema → top users → limpieza + <code>persist</code> → Tokenizer sobre <code>text_clean</code> → stops → explode → count. Archivo: <code>twitter_training.csv</code>.</div>
+<pre><code>from pyspark.sql import functions as F
+from pyspark.ml.feature import Tokenizer, StopWordsRemover
+
+PATH = "/content/twitter_training.csv"  # no traindata.csv
+schema = "id long, user string, sentiment string, text string"
+df = spark.read.csv(PATH, header=True, schema=schema)
+
+(df.groupBy("user").count().orderBy(F.desc("count")).limit(20).show(truncate=False))
+
+df_clean = (df
     .withColumn("text_clean", F.regexp_replace("text", r"https?://[^\s]+", ""))
     .withColumn("text_clean", F.regexp_replace("text_clean", r"@\w+", " "))
     .withColumn("text_clean", F.regexp_replace("text_clean", r"[^\w\s]", " "))
     .withColumn("text_clean", F.regexp_replace("text_clean", r"\s+", " "))
     .withColumn("text_clean", F.lower(F.trim("text_clean")))
-    .filter(F.length("text_clean") > 1)
+    .filter(F.length("text_clean") &gt; 1)
     .persist())
+
 tokenizer = Tokenizer(inputCol="text_clean", outputCol="tokens")
 stop = StopWordsRemover(inputCol="tokens", outputCol="filtered")
-word_counts = (stop.transform(tokenizer.transform(df_clean))
+tokens = tokenizer.transform(df_clean)
+filtered = stop.transform(tokens)
+word_counts = (filtered
     .select(F.explode("filtered").alias("token"))
-    .groupBy("token").count().orderBy(F.desc("count")))</code></pre>
-<p>Tópicos, en este orden: <strong>CountVectorizer</strong> (bolsa dispersa, <code>rawFeatures</code>) → <strong>IDF</strong> (pesa lo poco frecuente, <code>vectors</code>) → <strong>LDA</strong> (<code>k</code> temas, no supervisado) → <code>describeTopics</code>. La calidad depende de la limpieza y de <code>vocabSize</code>.</p>
-<pre><code>cv = CountVectorizer(inputCol="filtered", outputCol="rawFeatures", vocabSize=200, minDF=2)
+    .groupBy("token").count().orderBy(F.desc("count")))
+word_counts.show(20)
+# wc_sample = word_counts.limit(500).toPandas()  # WordCloud</code></pre>
+<h3>Topic modeling (corregido)</h3>
+<p>Orden fijo: <strong>CountVectorizer</strong> (<code>rawFeatures</code>) → <strong>IDF</strong> (<code>vectors</code>) → <strong>LDA</strong> (<code>k</code> temas) → <code>describeTopics</code>. La calidad depende de la limpieza y de <code>vocabSize</code>.</p>
+<pre><code>from pyspark.ml.feature import CountVectorizer, IDF
+from pyspark.ml.clustering import LDA
+
+cv = CountVectorizer(inputCol="filtered", outputCol="rawFeatures", vocabSize=200, minDF=2)
+feat = cv.fit(filtered).transform(filtered)
 idf = IDF(inputCol="rawFeatures", outputCol="vectors")
-lda = LDA(k=10, maxIter=10, featuresCol="vectors")</code></pre>
+rescaled = idf.fit(feat).transform(feat)
+lda = LDA(k=10, maxIter=10, featuresCol="vectors")
+lda_model = lda.fit(rescaled)
+lda_model.describeTopics(10).show(truncate=False)</code></pre>
 <h3>Puente con el DWH</h3>
 <div class="callout info"><div class="lbl">[resumen]</div>Spark hace el <strong>ETL/ELT</strong>: lee crudo del data lake (S3 o HDFS), limpia, agrega y escribe al DWH o a tablas curadas. En un <strong>lakehouse</strong> consulta Parquet, Delta o Iceberg con ACID. También arma hechos y dimensiones (Kimball) a partir de lo ya procesado. El ELT moderno carga crudo al lago y transforma con Spark o dbt en el destino. Snowflake, BigQuery o Redshift pueden ocupar partes del pipeline; Spark sigue siendo el motor de preparación.</div>
 <div class="callout tip"><div class="lbl">[Fundamentals]</div>Un lake sin catálogo ni capa ACID degenera en <em>data swamp</em>. Preferí Parquet (no CSV) para schema-on-read; evitá miles de archivos diminutos (un PUT por fila). Un MERGE/CDC fila a fila sobre columnar es Copy-on-Write caro: loteá. Lambda (batch+stream duplicados) solo si hace falta; Kappa unifica en un stream con replay.</div>
@@ -305,7 +404,14 @@ const QUIZ = [
 {tag:'Opt', c:'purple', q:'Un lago con CSV crudo + SELECT * pay-per-scan suele…', opts:['Aprovechar column pruning automáticamente','Romperse con cambios de esquema y disparar facturas altas','Dar ACID gratis','Ser el formato preferido de Catalyst'], a:1, why:'[Fundamentals] Schema-on-read con CSV es frágil; SELECT * anula pruning. Prefiere Parquet/particionado.'},
 {tag:'Opt', c:'purple', q:'Si Parquet anota en el pie "edad 18–35" y filtras edad > 50…', opts:['Spark descarga el bloque igual','Puede saltar el bloque sin leer los datos','Obliga un shuffle wide','Convierte el archivo a CSV'], a:1, why:'[quiz16] Stats del footer + predicate pushdown = block skipping.'},
 {tag:'DWH', c:'gold', q:'Carpetas /ventas/año=2026/mes=11/ en el lago sirven para…', opts:['Forzar un collect al driver','Que el WHERE por año/mes ignore el resto de carpetas','Reemplazar a Catalyst','Borrar Bronze cada noche'], a:1, why:'[quiz16] Partición física (Hive-style): menos archivos escaneados, menos costo.'},
-{tag:'DWH', c:'teal', q:'En el medallón, ¿quién limpia nulos y tipos hacia Parquet?', opts:['La capa Gold sola, sin motor','Silver, típicamente con Spark','Solo el POS','El cluster manager'], a:1, why:'[quiz16] Bronze aterriza; Silver limpia; Gold agrega para BI.'}
+{tag:'DWH', c:'teal', q:'En el medallón, ¿quién limpia nulos y tipos hacia Parquet?', opts:['La capa Gold sola, sin motor','Silver, típicamente con Spark','Solo el POS','El cluster manager'], a:1, why:'[quiz16] Bronze aterriza; Silver limpia; Gold agrega para BI.'},
+{tag:'Lazy', c:'gold', q:'describe() en un DataFrame…', opts:['Es una transformación lazy que no lee datos','Es una acción de perfilado (count, mean, stddev, min, max)','Solo funciona sobre RDD sin esquema','Equivale a explain(True)'], a:1, why:'Dispara ejecución y resume columnas numéricas. No es un plan vacío.'},
+{tag:'Opt', c:'purple', q:'Broadcast variable, accumulator y broadcast join…', opts:['Son tres nombres del mismo mecanismo','Son distintos: lookup solo lectura; contador sumable; estrategia de join','Solo existen en MapReduce','Reemplazan a Catalyst'], a:1, why:'Variable broadcast ≠ broadcast join. Accumulator solo suma hacia el driver.'},
+{tag:'Opt', c:'purple', q:'La cadena de Catalyst, en orden, es…', opts:['Código → AQE → Tungsten → disco','Plan lógico → lógico optimizado → planes físicos → costos → codegen','Solo pushdown sin plan físico','RDD → Dataset → CSV'], a:1, why:'Optimiza el lógico, elige físico por costo y genera código. Tungsten lo ejecuta.'},
+{tag:'DF', c:'pink', q:'En el pipeline housing corregido, lo sano es…', opts:['Mezclar IntegerType y DoubleType en el schema del CSV','Leer con schema homogéneo (doubles) y castear a entero después','Usar solo collect para tipar','Inferir y nunca castear'], a:1, why:'El CSV trae doubles. Cast post-lectura evita nulos raros por tipos mezclados.'},
+{tag:'Shuffle', c:'blue', q:'MEMORY_AND_DISK (default de persist) conviene cuando…', opts:['Nunca reusas el DataFrame','El linaje es caro (limpieza + varias ramas) y la RAM puede no alcanzar','Solo querés un print','Querés borrar el shuffle'], a:1, why:'Guarda en RAM y derrama a disco. Si no cabe MEMORY_ONLY, no recomputás todo.'},
+{tag:'Opt', c:'purple', q:'Tungsten aporta sobre todo…', opts:['Tokenizar tweets','Memoria off-heap, formato binario y whole-stage codegen','El modo client','inferSchema'], a:1, why:'Es la capa de ejecución compacta. Catalyst decide el plan; Tungsten lo corre.'},
+{tag:'Stack', c:'teal', q:'Structured Streaming trata el stream como…', opts:['Un CSV estático sin tiempo','Una tabla que crece, procesada en micro-batches','Solo GraphX','Un accumulator'], a:1, why:'Misma idea de DataFrame/SQL sobre datos que llegan en lotes pequeños.'}
 ];
 
 const CASES = [
@@ -318,7 +424,9 @@ const CASES = [
 { title:'Caso 7 · Hechos unidos a una dimensión chica', prompt:'Una tabla de hechos enorme se une a una dimensión de producto que cabe holgada en memoria. El plan muestra un shuffle de las dos. ¿Qué le pides a Spark y qué riesgo queda?', solution:'<strong>Broadcast</strong> de la dimensión: se copia a los executors y los hechos no viajan. Es el patrón estrella del resumen. El riesgo es declarar chica una tabla que no cabe: los executors se quedan sin memoria. AQE puede cambiar la estrategia al ver el tamaño real post-shuffle, pero no adivina si la dimensión ya no entra.', h1:'¿Qué optimizador reescribe el join?', h2:'¿Qué mide AQE que el plan inicial solo estima?', rubric:'Rúbrica: 2 broadcast + 2 hecho vs dimensión + 1 riesgo de memoria.'},
 { title:'Caso 8 · La limpieza corre tres veces', prompt:'df_clean alimenta el top de usuarios ya calculado aparte, luego la nube y luego el LDA, sin persist. Cada acción tarda como si releyera y reaplicara la regex. ¿Qué falta y cuándo lo sueltas?', solution:'<code>persist()</code> (default MEMORY_AND_DISK) después del filtro de limpieza, porque hay varias acciones sobre el mismo linaje. <code>cache()</code> sería solo memoria. Al terminar el ML, <code>unpersist()</code> para no dejar la copia ocupando el executor.', h1:'¿Cuántos jobs dispara cada acción?', h2:'¿Qué default tiene persist() sin argumentos?', rubric:'Rúbrica: 2 por qué se recomputa + 2 persist vs cache + 1 unpersist.'},
 { title:'Caso 9 · Suma por clave con groupByKey', prompt:'Tienes pares (producto_id, monto) de ~100 GB. Un compañero escribe groupByKey().mapValues(sum). La red se satura y un executor hace OOM en un producto popular. ¿Qué pedís en su lugar y por qué?', solution:'<strong>[Learning Spark] reduceByKey</strong> (o aggregate/combine con reduce local) suma dentro de cada partición antes del shuffle. groupByKey manda listas crudas y materializa todas las ventas de esa clave en un nodo. En DataFrame: <code>groupBy("producto_id").sum("monto")</code> ya va por Catalyst con agregación parcial. <strong>Trade-off:</strong> reduceByKey exige asociatividad; groupByKey es más general y más caro.', h1:'¿Qué es el map-side combine?', h2:'¿Cuál es el equivalente DataFrame?', rubric:'Rúbrica: 2 diagnóstico + 2 reduceByKey/DF + 1 trade-off.'},
-{ title:'Caso 10 · MERGE cada 5 s sobre Parquet', prompt:'Un CDC dispara MERGE sobre tablas Parquet en S3 cada pocos segundos. El pipeline se atrasa horas y el cómputo se dispara. ¿Qué está pasando físicamente y qué cambiás?', solution:'<strong>[Fundamentals] Copy-on-Write:</strong> actualizar pocas filas reescribe archivos columnares enteros. Agrupa el MERGE en micro-lotes (minutos), compacta y VACUUM/optimize. No trates Parquet como un heap fila-a-fila de Postgres. <strong>Trade-off:</strong> latencia de frescura vs. costo de reescritura.', h1:'¿Por qué Parquet es inmutable a nivel archivo?', h2:'¿Qué problema de "archivos pequeños" aparece si insertás 1 fila por PUT?', rubric:'Rúbrica: 2 COW + 2 loteo + 1 trade-off.'}
+{ title:'Caso 10 · MERGE cada 5 s sobre Parquet', prompt:'Un CDC dispara MERGE sobre tablas Parquet en S3 cada pocos segundos. El pipeline se atrasa horas y el cómputo se dispara. ¿Qué está pasando físicamente y qué cambiás?', solution:'<strong>[Fundamentals] Copy-on-Write:</strong> actualizar pocas filas reescribe archivos columnares enteros. Agrupa el MERGE en micro-lotes (minutos), compacta y VACUUM/optimize. No trates Parquet como un heap fila-a-fila de Postgres. <strong>Trade-off:</strong> latencia de frescura vs. costo de reescritura.', h1:'¿Por qué Parquet es inmutable a nivel archivo?', h2:'¿Qué problema de "archivos pequeños" aparece si insertás 1 fila por PUT?', rubric:'Rúbrica: 2 COW + 2 loteo + 1 trade-off.'},
+{ title:'Caso 11 · Contador vs diccionario vs join', prompt:'En un job querés (a) un mapa país→región de 2 KB en cada executor, (b) contar filas corruptas mientras leés, y (c) unir hechos a una dimensión de 50 MB. Un compañero propone “broadcast” para las tres. ¿Qué usás en cada una?', solution:'(a) <strong>Broadcast variable</strong>: lookup de solo lectura. (b) <strong>Accumulator</strong>: los executors solo suman; el driver lee el total. (c) <strong>Broadcast join</strong> de la dimensión (si cabe en cada executor). No son el mismo mecanismo: confundirlos en el examen es trampa típica del resumen.', h1:'¿Quién lee el accumulator?', h2:'¿Qué pasa si la “dimensión” de 50 MB en realidad pesa 5 GB?', rubric:'Rúbrica: 2 var vs join + 2 accumulator + 1 riesgo de memoria.'},
+{ title:'Caso 12 · Pipeline housing de cero', prompt:'Te piden reproducir el flujo housing sin abrir el markdown: leer CSV, tipar bien, SQL de promedio por edad, perfilar y escribir Parquet en 4 partes. Escribí el esqueleto mental.', solution:'Schema <strong>homogéneo double</strong> → <code>read.csv</code> → <code>select</code> con <code>cast(IntegerType)</code> + <code>struct(longitude,latitude).alias("location")</code> → <code>createOrReplaceTempView</code> + SQL (AVG por edad, filtro rooms) → <code>describe().show()</code> → <code>repartition(4).write.mode("overwrite").parquet(...)</code>. No mezcles Integer en el schema del CSV.', h1:'¿Por qué cast después y no en el StructType del CSV?', h2:'¿describe es transformación o acción?', rubric:'Rúbrica: 2 schema + 2 cast/SQL/describe + 1 write/repartition.'}
 ];
 
 const GLOSSARY = [
@@ -363,6 +471,12 @@ const GLOSSARY = [
 ['Tungsten','Ejecución eficiente: memoria off-heap y código generado. (resumen)'],
 ['AQE','Reoptimización en runtime con estadísticas reales. (resumen)'],
 ['Broadcast join','Copia una tabla pequeña a los executors para no shufflear la grande. (resumen)'],
+['Broadcast variable','Dato de solo lectura enviado una vez a cada nodo (lookup). No es el broadcast join. (resumen)'],
+['Accumulator','Contador al que los executors solo suman; el driver lo lee. (resumen)'],
+['describe','Acción de perfilado: count, mean, stddev, min, max de columnas numéricas. (notebook)'],
+['MEMORY_ONLY','Nivel de persist (= cache): solo RAM. Si no cabe, se pierde la partición y se recomputa. (resumen)'],
+['MEMORY_AND_DISK','Default de persist(): RAM y el resto a disco. Ideal si el linaje es caro. (notebook)'],
+['DISK_ONLY','Persist solo en disco: útil con RAM justa y recomputo muy caro. (resumen)'],
 ['Parquet','Formato columnar comprimido. El preferido para leer y escribir en Spark. (resumen)'],
 ['Delta Lake','Capa ACID y time travel sobre Parquet. Pieza de un lakehouse. (resumen)'],
 ['Medallón','Bronze crudo, Silver limpio (Spark), Gold curado para BI. (quiz16)'],
@@ -382,12 +496,10 @@ const GLOSSARY = [
 ];
 
 const CHEATSHEET = `
-<div class="card accent-gold"><h3 style="margin-top:0;">Recursos y modos</h3><p style="font-size:14px;">Un CPU por defecto en pandas/numpy. Límites: <strong>RAM</strong> (datos e intermedios) y <strong>tiempo</strong>. Paralelo = N núcleos. Distribuido = N máquinas. <code>local[*]</code> es una JVM, no un clúster.</p></div>
-<div class="card accent-purple"><h3 style="margin-top:0;">Spark vs MapReduce</h3><p style="font-size:14px;">Intermedios en <strong>memoria</strong>. Motor unificado: batch, SQL, streaming, ML, grafos. <strong>No es almacenamiento</strong>. Sobre Hadoop reemplaza el motor (YARN + HDFS), no todo el ecosistema.</p></div>
-<div class="card accent-teal"><h3 style="margin-top:0;">Arquitectura</h3><p style="font-size:14px;"><strong>Driver</strong> arma el DAG. <strong>Cluster manager</strong> asigna (Standalone, YARN, K8s). <strong>Executors</strong> corren tasks y cachean. Modos: local, client (driver en tu máquina), cluster (driver adentro).</p></div>
-<div class="card accent-orange"><h3 style="margin-top:0;">Regla de oro</h3><p style="font-size:14px;">Ejecución remota incluso en <code>local[*]</code>. Nada de bucles fila a fila. <code>collect</code> y <code>toPandas</code> solo para muestras. UDF más lenta que Spark SQL. Cerrar con <code>spark.stop()</code>. Java 21 alcanza en el Colab.</p></div>
-<div class="card accent-pink"><h3 style="margin-top:0;">DataFrame</h3><p style="font-size:14px;">Schema DDL o StructType evita la doble pasada. <code>F.col</code> en expresiones. Vista temporal = solo esta sesión, mismo Catalyst. RDD sin optimizar; Dataset tipado es Scala/Java.</p></div>
-<div class="card accent-gold"><h3 style="margin-top:0;">Lazy y shuffle</h3><p style="font-size:14px;"><strong>1 acción = 1 job → stages entre shuffles → tasks por partición.</strong> Narrow no mueve datos. Wide sí. <code>repartition</code> sube o baja con shuffle. <code>coalesce</code> solo baja. <code>persist()</code> = MEMORY_AND_DISK. <code>cache()</code> = MEMORY_ONLY.</p></div>
-<div class="card accent-purple"><h3 style="margin-top:0;">Optimización y archivos</h3><p style="font-size:14px;"><strong>Catalyst</strong> (pushdown, pruning) · <strong>Tungsten</strong> (off-heap, codegen) · <strong>AQE</strong> (stats reales). Broadcast si la dimensión cabe. Parquet columnar. Delta / Iceberg / Hudi = lakehouse.</p></div>
-<div class="card accent-teal"><h3 style="margin-top:0;">Tweets y DWH</h3><p style="font-size:14px;">Archivo <code>twitter_training.csv</code>. Schema explícito. Tokenizar <code>text_clean</code>. Tokenizer → stops → explode → count. Luego CountVectorizer → IDF → LDA. Puente: fuentes → Spark → lake/Delta → DWH, o ELT en el destino.</p></div>
+<div class="card accent-gold"><h3 style="margin-top:0;">Fundamentos</h3><p style="font-size:14px;">Spark &gt; MapReduce en iteraciones por <strong>memoria</strong>. Stack: Core, SQL, GraphX, SparkML/MLlib, Structured Streaming. Roles: <strong>driver</strong> (DAG), <strong>CM</strong> (YARN/K8s/Standalone), <strong>executors</strong>. Modos: local / client / cluster. <strong>No es BD ni almacén</strong>. Un CPU por defecto en pandas; límites RAM y tiempo.</p></div>
+<div class="card accent-blue"><h3 style="margin-top:0;">RDD, ejecución, rendimiento</h3><p style="font-size:14px;"><strong>Resiliente</strong> = linaje (no hace falta replicar). Transformaciones lazy vs acciones. Narrow vs wide; shuffle = frontera de stage. <strong>1 acción = 1 job → stages → tasks</strong>. <code>repartition</code> (shuffle) vs <code>coalesce</code> (solo baja). <code>cache</code>=MEMORY_ONLY; <code>persist</code>=MEMORY_AND_DISK; también DISK_ONLY. <code>unpersist</code> al terminar.</p></div>
+<div class="card accent-pink"><h3 style="margin-top:0;">APIs y optimización</h3><p style="font-size:14px;">RDD sin Catalyst; <strong>DataFrame</strong> en PySpark; Dataset tipado = Scala/Java. <strong>Catalyst</strong>: lógico → optimizado (pushdown, pruning) → físicos → costos → codegen. <strong>Tungsten</strong>: off-heap + whole-stage. <strong>AQE</strong>: stats reales. Broadcast join ≠ broadcast var ≠ accumulator.</p></div>
+<div class="card accent-purple"><h3 style="margin-top:0;">Formatos y arquitectura</h3><p style="font-size:14px;"><strong>Parquet</strong> (columnar, pushdown, block skipping) &gt; CSV. ORC (Hive), Avro (filas/streaming), Delta/Iceberg/Hudi (ACID, lakehouse). Spark en ETL/ELT, data lake, lakehouse y hacia el DWH. Medallón: Bronze → Silver (Spark) → Gold.</p></div>
+<div class="card accent-orange"><h3 style="margin-top:0;">PySpark práctico</h3><p style="font-size:14px;">Regla de oro: ejecución remota. <code>SparkSession</code> + <code>stop()</code>. Schema string/StructType; cast post-lectura; <code>F.col</code>/alias; filter=where; temp view + SQL; <code>explain</code>; <code>describe</code>; <code>groupBy</code>+<code>agg</code>; write + repartition. Housing: doubles → cast → struct location → Parquet. Tweets: schema, regex, Tokenizer(<code>text_clean</code>), CV→IDF→LDA.</p></div>
+<div class="card accent-teal"><h3 style="margin-top:0;">Quirks (trampas)</h3><p style="font-size:14px;">Java 8 apt 404 → <strong>JAVA_HOME 21</strong> funciona. Archivo real: <code>twitter_training.csv</code> (no traindata). Celdas “Escriba aquí” con solución abajo. Schema housing mezclado → nulos. Tokenizer sobre <code>text</code> crudo rompe la nube. Sin <code>groupBy(token).count()</code> no hay WordCloud.</p></div>
 `;

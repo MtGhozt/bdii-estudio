@@ -93,8 +93,9 @@ html = html.slice(0, inicioStart) + inicioHTML + html.slice(aprendeStart);
 console.log('OK inicio');
 
 const mStart = html.indexOf('const MODULES = [');
-const tipStart = html.indexOf('/* ---- Glossary tip bubbles ---- */');
-if (mStart < 0 || tipStart < 0) { console.error('markers'); process.exit(1); }
+let tipStart = html.indexOf('/* ---- Glossary tip bubbles ---- */');
+if (tipStart < 0) tipStart = html.indexOf('const $ = s => document.querySelector(s);');
+if (mStart < 0 || tipStart < 0) { console.error('markers', { mStart, tipStart }); process.exit(1); }
 const data = fs.readFileSync(path.join(__dirname, '_spark_data.js'), 'utf8');
 const ctx = {};
 vm.createContext(ctx);
@@ -103,10 +104,13 @@ console.log('DATA', JSON.stringify(ctx.__counts));
 if (ctx.__counts.m !== 10 || ctx.__counts.ids !== 'm0,m1,m2,m3,m4,m5,m6,m7,m8,m9') {
   console.error('FAIL module ids'); process.exit(1);
 }
-if (ctx.__counts.q < 32 || ctx.__counts.q > 50) { console.error('FAIL quiz count', ctx.__counts.q); process.exit(1); }
+if (ctx.__counts.q < 32 || ctx.__counts.q > 60) { console.error('FAIL quiz count', ctx.__counts.q); process.exit(1); }
 if (ctx.__counts.cs < 6) { console.error('FAIL cases'); process.exit(1); }
 if (ctx.__counts.g < 30) { console.error('FAIL glossary'); process.exit(1); }
-html = html.slice(0, mStart) + data + '\n' + html.slice(tipStart);
+const tipBanner = tipStart === html.indexOf('const $ = s => document.querySelector(s);')
+  ? '/* ---- Glossary tip bubbles ---- */\n'
+  : '';
+html = html.slice(0, mStart) + data + '\n' + tipBanner + html.slice(tipStart);
 console.log('OK data injected');
 
 const aliasStart = html.indexOf('const aliases = {');
@@ -129,6 +133,10 @@ if (aliasStart > 0 && aliasEnd > aliasStart) {
     'cache':'cache', 'persist':'persist',
     'catalyst':'Catalyst', 'tungsten':'Tungsten', 'aqe':'AQE',
     'broadcast':'Broadcast join', 'broadcast join':'Broadcast join',
+    'broadcast variable':'Broadcast variable', 'broadcast variables':'Broadcast variable',
+    'accumulator':'Accumulator', 'accumulators':'Accumulator',
+    'describe':'describe',
+    'memory_only':'MEMORY_ONLY', 'memory_and_disk':'MEMORY_AND_DISK', 'disk_only':'DISK_ONLY',
     'parquet':'Parquet', 'delta':'Delta Lake', 'delta lake':'Delta Lake',
     'tokenizer':'Tokenizer', 'stopwords':'StopWordsRemover', 'stopwordsremover':'StopWordsRemover',
     'lda':'LDA', 'lakehouse':'Lakehouse',
