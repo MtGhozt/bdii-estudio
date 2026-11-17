@@ -355,6 +355,7 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
 }
 
 </style>
+  <link rel="stylesheet" href="../../assets/learn-stage.css">
 </head>
 <body><a class="skip-link" href="#main">Saltar al contenido</a>
 <header>
@@ -365,7 +366,6 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
     <nav class="tabs" id="tabs" role="tablist" aria-label="Vistas de estudio">
       <button class="tab active" role="tab" aria-selected="true" data-view="inicio">Inicio</button>
       <button class="tab" role="tab" aria-selected="false" data-view="aprende">Aprende</button>
-      <button class="tab" role="tab" aria-selected="false" data-view="animaciones">Animaciones</button>
       <button class="tab" role="tab" aria-selected="false" data-view="quiz">Quiz & Casos</button>
       <button class="tab" role="tab" aria-selected="false" data-view="glosario">Glosario</button>
       <button class="tab" role="tab" aria-selected="false" data-view="cheatsheet">Cheatsheet</button>
@@ -410,7 +410,7 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
   <p class="lede">Tres pasos, en orden. Cada uno prepara el siguiente.</p>
   <ol class="path">
     <li><button class="path-step" onclick="go('aprende')"><span class="path-n">01</span><span><span class="path-t">Aprende</span><span class="path-d">9 módulos (cobertura 100% del paper). Pasa el cursor o toca un término subrayado para ver la burbuja del glosario.</span></span></button></li>
-    <li><button class="path-step" onclick="go('animaciones')"><span class="path-n">02</span><span><span class="path-t">Animaciones</span><span class="path-d">Webtable, jerarquía de localización, serving, recovery con sort y path de lectura.</span></span></button></li>
+    <li><button class="path-step" onclick="go('aprende')"><span class="path-n">02</span><span><span class="path-t">Figuras en Aprende</span><span class="path-d">Los esquemas y los flujos están junto al párrafo que los explica.</span></span></button></li>
     <li><button class="path-step" onclick="go('quiz')"><span class="path-n">03</span><span><span class="path-t">Quiz y casos</span><span class="path-d">59 preguntas (problema, Chubby, trade-off, benchmarks, apps, relacionado, cierre, puente) + 9 casos. Si fallas, el hueco es de estudio — no de contenido faltante.</span></span></button></li>
   </ol>
 </section>
@@ -419,16 +419,6 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
   <h2>Aprende Bigtable desde cero</h2>
   <p class="lede">Sigue los módulos en orden. Los términos del glosario aparecen con <strong>subrayado punteado</strong>: hover o tap abre la burbuja. Los <strong>Trade-off</strong> son los que más caen en el quiz.</p>
   <div class="aprende-layout"><nav class="module-nav" id="moduleNav"></nav><div class="module-content" id="moduleContent"></div></div>
-</section>
-<section id="view-animaciones" class="view">
-  <span class="kicker">Laboratorio visual</span>
-  <h2>Animaciones interactivas</h2>
-  <p class="lede">Pulsa los botones y observa el sistema en movimiento. Cada animación muestra su estado (play / pausa / listo), barra de progreso y narrador paso a paso.</p>
-  <div class="card accent-blue" id="anim-webtable"><h3>1 · Webtable: fila, familias y versiones</h3><p style="font-size:14px;">La fila <code>com.cnn.www</code>: familia <code>contents:</code> con 3 versiones y familia <code>anchor:</code> con 2 columnas.</p><div class="controls"><button class="btn small" onclick="animWebtable.show('contents')">Ver contents: (3 versiones)</button><button class="btn small" onclick="animWebtable.show('anchor')">Ver anchor: (2 columnas)</button><button class="btn teal small" onclick="animWebtable.show('both')">Ver todo</button></div><figure><svg id="svgGraph" viewBox="0 0 720 340" role="img" aria-label="Webtable slice"></svg><figcaption>Webtable · <span id="graphCaption">Pulsa un botón.</span></figcaption></figure><p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m1')">Leer en Aprende → Módulo 1 · Modelo de datos</button></p></div>
-  <div class="card accent-purple" id="anim-locate"><h3>2 · Localización de tablets en 3 niveles</h3><p style="font-size:14px;">Caché vacía = 3 round-trips (incl. Chubby). Caché stale = hasta 6. Con prefetch se amortiza.</p><div class="controls"><button class="btn small" onclick="animLocate.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animLocate.play()">Reproducir</button><button class="btn small ghost" onclick="animLocate.reset()">Reiniciar</button></div><figure><svg id="svgCheck" viewBox="0 0 720 360" role="img" aria-label="Tablet location"></svg><figcaption>Localización · <span id="checkCaption">Pulsa "Siguiente paso".</span></figcaption></figure><p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m4')">Leer en Aprende → Módulo 4 · Master, tablets y serving</button></p></div>
-  <div class="card accent-teal" id="anim-serve"><h3>3 · Tablet serving + compactions</h3><p style="font-size:14px;">Write → commit log → memtable → minor → merging → major. Read = vista fusionada.</p><div class="controls"><button class="btn small" onclick="animServe.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animServe.play()">Reproducir</button><button class="btn small ghost" onclick="animServe.reset()">Reiniciar</button></div><figure><svg id="svgEnemy" viewBox="0 0 720 300" role="img" aria-label="Serving pipeline"></svg><figcaption>Serving · <span id="enemyCaption">Pulsa "Siguiente paso".</span></figcaption></figure><p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m5')">Leer en Aprende → Módulo 5 · Refinamientos</button></p></div>
-  <div class="card accent-orange" id="anim-recovery"><h3>4 · Un solo commit log: el trade-off de recovery</h3><p style="font-size:14px;">Un log por servidor = group commit eficiente, pero recovery exige <strong>ordenar</strong> por (tabla, fila, seq).</p><div class="controls"><button class="btn small" onclick="animRecovery.play()">Reproducir recovery</button><button class="btn small ghost" onclick="animRecovery.reset()">Reiniciar</button></div><figure><svg id="svgZookie" viewBox="0 0 720 340" role="img" aria-label="Log sort recovery"></svg><figcaption>Recovery · <span id="zookieCaption">Pulsa reproducir.</span></figcaption></figure><p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m5')">Leer en Aprende → Módulo 5 · Commit log / recovery</button></p></div>
-  <div class="card accent-gold" id="anim-read"><h3>5 · Path de lectura: Bloom + cachés + bloques</h3><p style="font-size:14px;">Bloom evita seeks a SSTables que no tienen la fila; Scan Cache vs Block Cache; bloque de 64KB vs 8KB. Prueba apagar Bloom o cambiar el bloque y mira cómo cambian los seeks visibles.</p><div class="controls"><button class="btn small" onclick="animRead.play()">Animar lectura</button><button class="btn small ghost" onclick="animRead.reset()">Reiniciar</button></div><div class="controls"><label style="display:inline-flex; align-items:center; gap:8px; font-size:14px; color:var(--text); cursor:pointer;"><input type="checkbox" id="bloomToggle" checked style="width:17px; height:17px; accent-color:var(--teal);"> Bloom filter ON/OFF</label><label style="display:inline-flex; align-items:center; gap:8px; font-size:14px; color:var(--text);">Bloque SSTable: <input type="range" id="blockRange" min="8" max="64" step="56" value="64" style="width:120px; vertical-align:middle;"> <b id="blockLabel">64KB</b></label><span class="score-chip" id="seekLbl">Seeks visibles: 1 · 64KB (64×)</span></div><figure><svg id="svgArch" viewBox="0 0 720 360" role="img" aria-label="Read path"></svg><figcaption>Lectura · <span id="archCaption">Pulsa "Animar lectura".</span></figcaption></figure><p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m5')">Leer en Aprende → Módulo 5 · Path de lectura</button></p></div>
 </section>
 <section id="view-quiz" class="view">
   <span class="kicker">Comprueba tu aprendizaje</span>
@@ -492,7 +482,7 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
   <div id="cheatsheetContent"></div>
 </section>
 </main>
-<footer>Herramienta de estudio sobre "Bigtable: A Distributed Storage System for Structured Data" (OSDI 2006). Leer → animar → practicar.</footer>
+<footer>Herramienta de estudio sobre "Bigtable: A Distributed Storage System for Structured Data" (OSDI 2006). Leer con las figuras → practicar.</footer>
 <script>
 const MODULES = [
 { id:'m0', tag:'Módulo 0', accent:'gold', title:'El problema: datos estructurados a petabytes',
@@ -1121,15 +1111,7 @@ function seededRandom(seed){ let s=seed>>>0; return ()=>{ s=(Math.imul(s,1664525
 function prepareShuffledMCQ(opts,correctIndex,seedKey){ const indices=opts.map((_,i)=>i); const rand=seededRandom(hashSeedStr(seedKey)); for(let i=indices.length-1;i>0;i--){ const j=Math.floor(rand()*(i+1)); [indices[i],indices[j]]=[indices[j],indices[i]]; } return { opts:indices.map(ix=>opts[ix]), a:indices.indexOf(correctIndex) }; }
 function shuffledQuizItem(qi){ const q=QUIZ[qi]; return prepareShuffledMCQ(q.opts,q.a,PAPER_SHUFFLE_ID+'|quiz|'+qi); }
 function shuffledMini(m){ return prepareShuffledMCQ(m.mini.opts,m.mini.a,PAPER_SHUFFLE_ID+'|mini|'+m.id); }
-const MODULE_ANIMS = {
-  m1: [{id:'anim-webtable', label:'Webtable'}],
-  m4: [{id:'anim-locate', label:'Localización 3 niveles'}],
-  m5: [
-    {id:'anim-serve', label:'Serving + compactions'},
-    {id:'anim-recovery', label:'Recovery / commit log'},
-    {id:'anim-read', label:'Path de lectura'}
-  ]
-};
+const MODULE_ANIMS = {};
 const QUIZ_MODULE_HINT = {
   'trade-off':'m5', 'Modelo':'m1', 'API':'m2', 'Building blocks':'m3', 'Núcleo':'m4',
   'Apps':'m6', 'Perf':'m6', 'Relacionado':'m8', 'Puente':'m7',
@@ -1145,6 +1127,7 @@ function saveJSON(key, val){ try{ localStorage.setItem(key, JSON.stringify(val))
 
 function go(view, opts){
   opts = opts || {};
+  if (view === 'animaciones') view = 'aprende';
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   const elv = $('#view-'+view);
   if (!elv) return;
@@ -1156,7 +1139,6 @@ function go(view, opts){
   });
   if (!opts.keepScroll) window.scrollTo({top:0, behavior: opts.instant ? 'auto' : 'smooth'});
   if (view==='quiz' && !quiz.rendered) quiz.render();
-  if (view==='animaciones' && !animsRendered) initAnims();
   if (view==='quiz' && opts.panel) setQuizPanel(opts.panel);
   if (view==='animaciones' && opts.animId) {
     requestAnimationFrame(()=>{
@@ -1231,7 +1213,7 @@ function updateContinueCard(){
   } else if (lastView.view === 'quiz') {
     detail = '<strong>Quiz</strong> — modo ' + (lastView.mode||'estudio') + (quizWrong.length ? ' · ' + quizWrong.length + ' falladas guardadas' : '') + (quizScores.length ? ' · último ' + quizScores[quizScores.length-1] + '%' : '');
   } else if (lastView.view === 'animaciones') {
-    detail = '<strong>Animaciones</strong> — laboratorio visual';
+    detail = '<strong>Aprende</strong> — figuras junto al texto';
   } else if (lastView.view === 'glosario') {
     detail = '<strong>Glosario</strong>';
   } else if (lastView.view === 'cheatsheet') {
@@ -1866,5 +1848,7 @@ enhanceTips($('#cheatsheetContent'));
   else if (parts[0]==='cheatsheet') go('cheatsheet', {instant:true});
 })();
 </script>
+<script src="../../assets/gsap.min.js"></script>
+<script src="../../assets/learn-stage.js"></script>
 </body>
 </html>

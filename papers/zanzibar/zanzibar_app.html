@@ -292,6 +292,7 @@ footer{margin-top:60px; padding:24px 20px; border-top:1px solid var(--border-sof
 }
 
 </style>
+  <link rel="stylesheet" href="../../assets/learn-stage.css">
 </head>
 <body><a class="skip-link" href="#main">Saltar al contenido</a>
 <header>
@@ -307,7 +308,6 @@ footer{margin-top:60px; padding:24px 20px; border-top:1px solid var(--border-sof
     <nav class="tabs" id="tabs" role="tablist" aria-label="Vistas de estudio">
       <button class="tab active" role="tab" aria-selected="true" data-view="inicio">Inicio</button>
       <button class="tab" role="tab" aria-selected="false" data-view="aprende">Aprende</button>
-      <button class="tab" role="tab" aria-selected="false" data-view="animaciones">Animaciones</button>
       <button class="tab" role="tab" aria-selected="false" data-view="quiz">Quiz & Casos</button>
       <button class="tab" role="tab" aria-selected="false" data-view="glosario">Glosario</button>
       <button class="tab" role="tab" aria-selected="false" data-view="cheatsheet">Cheatsheet</button>
@@ -355,7 +355,7 @@ footer{margin-top:60px; padding:24px 20px; border-top:1px solid var(--border-sof
   <p class="lede">Tres pasos, en orden. Cada uno prepara el siguiente.</p>
   <ol class="path">
     <li><button class="path-step" onclick="go('aprende')"><span class="path-n">01</span><span><span class="path-t">Aprende</span><span class="path-d">7 módulos progresivos, de novato a nivel de paper. Cada uno con ejemplos y mini-checks.</span></span></button></li>
-    <li><button class="path-step" onclick="go('animaciones')"><span class="path-n">02</span><span><span class="path-t">Animaciones</span><span class="path-d">Visualiza el grafo de tuplas, la evaluación de un Check, el "new enemy problem" y más.</span></span></button></li>
+    <li><button class="path-step" onclick="go('aprende')"><span class="path-n">02</span><span><span class="path-t">Figuras en Aprende</span><span class="path-d">Los esquemas y los flujos están junto al párrafo que los explica.</span></span></button></li>
     <li><button class="path-step" onclick="go('quiz')"><span class="path-n">03</span><span><span class="path-t">Quiz y casos</span><span class="path-d">23 preguntas técnicas con explicación + casos prácticos con solución paso a paso.</span></span></button></li>
   </ol>
 </section>
@@ -373,83 +373,6 @@ footer{margin-top:60px; padding:24px 20px; border-top:1px solid var(--border-sof
 </section>
 
 <!-- ===================== ANIMACIONES ===================== -->
-<section id="view-animaciones" class="view">
-  <span class="kicker">Laboratorio visual</span>
-  <h2>Animaciones interactivas</h2>
-  <p class="lede">Pulsa los botones y observa cómo se comporta el sistema. Estas son las mismas ideas de los módulos, pero en movimiento.</p>
-
-  <div class="card accent-blue" id="anim1">
-    <h3>1 · El grafo de tuplas</h3>
-    <p style="font-size:14px;">Cada tupla es una <strong>arista</strong> dirigida entre objetos/usuarios. Añade tuplas y luego ejecuta un Check para ver el recorrido.</p>
-    <div class="controls">
-      <button class="btn small" onclick="animGraph.add('owner','10')">+ doc#owner@10</button>
-      <button class="btn small" onclick="animGraph.add('member','11')">+ group#member@11</button>
-      <button class="btn small" onclick="animGraph.add('viewer','group:eng#member')">+ doc#viewer@eng#member</button>
-      <button class="btn small" onclick="animGraph.add('parent','folder:A')">+ doc#parent@folder:A</button>
-      <button class="btn small ghost" onclick="animGraph.reset()">Reiniciar</button>
-      <button class="btn teal small" onclick="animGraph.check()">Check: ¿es 11 viewer?</button>
-    </div>
-    <figure>
-      <svg id="svgGraph" viewBox="0 0 720 320" role="img" aria-label="Grafo de tuplas interactivo"></svg>
-      <figcaption>Fig A · <span id="graphCaption">Las tuplas forman un grafo dirigido. Pulsa los botones.</span></figcaption>
-    </figure>
-  </div>
-
-  <div class="card accent-purple" id="anim2">
-    <h3>2 · Evaluación de un Check (árbol de decisión)</h3>
-    <p style="font-size:14px;">Zanzibar evalúa la relación <code>viewer</code> como una <strong>unión</strong> de ramas, en paralelo. Aquí se recorre paso a paso.</p>
-    <div class="controls">
-      <button class="btn small" onclick="animCheck.step()">Siguiente paso →</button>
-      <button class="btn small ghost" onclick="animCheck.play()">Reproducir</button>
-      <button class="btn small ghost" onclick="animCheck.reset()">Reiniciar</button>
-    </div>
-    <figure>
-      <svg id="svgCheck" viewBox="0 0 720 360" role="img" aria-label="Árbol de evaluación de un Check"></svg>
-      <figcaption>Fig B · <span id="checkCaption">Pulsa "Siguiente paso" para evaluar cada rama.</span></figcaption>
-    </figure>
-  </div>
-
-  <div class="card accent-teal" id="anim3">
-    <h3>3 · El "new enemy problem"</h3>
-    <p style="font-size:14px;">¿Por qué la consistencia importa? Mira qué pasa si un Check lee datos <em>atrasados</em> después de que alguien fue removido.</p>
-    <div class="controls">
-      <button class="btn small" onclick="animEnemy.play()">Reproducir historia</button>
-      <button class="btn small ghost" onclick="animEnemy.reset()">Reiniciar</button>
-    </div>
-    <figure>
-      <svg id="svgEnemy" viewBox="0 0 720 300" role="img" aria-label="Línea de tiempo del new enemy problem"></svg>
-      <figcaption>Fig C · <span id="enemyCaption">Alice quita a Bob; Charlie (aún miembro) mueve el documento.</span></figcaption>
-    </figure>
-  </div>
-
-  <div class="card accent-orange" id="anim4">
-    <h3>4 · Ciclo de vida del zookie</h3>
-    <p style="font-size:14px;">El zookie es un <strong>token de frescura</strong> que viaja con el contenido y se reenvía en futuros Checks.</p>
-    <div class="controls">
-      <button class="btn small" onclick="animZookie.play()">Reproducir</button>
-      <button class="btn small ghost" onclick="animZookie.reset()">Reiniciar</button>
-    </div>
-    <figure>
-      <svg id="svgZookie" viewBox="0 0 720 340" role="img" aria-label="Ciclo de vida del zookie"></svg>
-      <figcaption>Fig D · <span id="zookieCaption">Pulsa reproducir.</span></figcaption>
-    </figure>
-  </div>
-
-  <div class="card accent-gold" id="anim5">
-    <h3>5 · Arquitectura en movimiento</h3>
-    <p style="font-size:14px;">Así fluye un Check: cliente → aclserver → (fan-out) → Spanner → respuesta.</p>
-    <div class="controls">
-      <button class="btn small" onclick="animArch.play()">Animar flujo</button>
-      <button class="btn small ghost" onclick="animArch.reset()">Reiniciar</button>
-    </div>
-    <figure>
-      <svg id="svgArch" viewBox="0 0 720 360" role="img" aria-label="Arquitectura de Zanzibar"></svg>
-      <figcaption>Fig E · <span id="archCaption">Pulsa "Animar flujo".</span></figcaption>
-    </figure>
-  </div>
-</section>
-
-<!-- ===================== QUIZ ===================== -->
 <section id="view-quiz" class="view">
   <span class="kicker">Comprueba tu aprendizaje</span>
   <h2>Quiz técnico</h2>
@@ -1038,12 +961,12 @@ function shuffledMini(m){
 const views = ['inicio','aprende','animaciones','quiz','glosario','cheatsheet'];
 
 function go(view){
+  if (view === 'animaciones') view = 'aprende';
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   $('#view-'+view).classList.add('active');
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.view===view));
   window.scrollTo({top:0, behavior:'smooth'});
   if(view==='quiz' && !quiz.rendered){ quiz.render(); }
-  if(view==='animaciones' && !animsRendered){ initAnims(); }
   updateProgress();
 }
 
@@ -1623,5 +1546,7 @@ renderCases();
 renderGlossary();
 updateProgress();
 </script>
+<script src="../../assets/gsap.min.js"></script>
+<script src="../../assets/learn-stage.js"></script>
 </body>
 </html>
