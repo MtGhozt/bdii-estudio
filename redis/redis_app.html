@@ -355,6 +355,7 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
 }
 
 </style>
+  <link rel="stylesheet" href="../assets/learn-stage.css">
 </head>
 <body><a class="skip-link" href="#main">Saltar al contenido</a>
 <header>
@@ -365,7 +366,6 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
     <nav class="tabs" id="tabs" role="tablist" aria-label="Vistas de estudio">
       <button class="tab active" role="tab" aria-selected="true" data-view="inicio">Inicio</button>
       <button class="tab" role="tab" aria-selected="false" data-view="aprende">Aprende</button>
-      <button class="tab" role="tab" aria-selected="false" data-view="animaciones">Animaciones</button>
       <button class="tab" role="tab" aria-selected="false" data-view="quiz">Quiz & Casos</button>
       <button class="tab" role="tab" aria-selected="false" data-view="glosario">Glosario</button>
       <button class="tab" role="tab" aria-selected="false" data-view="cheatsheet">Cheatsheet</button>
@@ -410,7 +410,7 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
   <p class="lede">Tres pasos, en orden. Cada uno prepara el siguiente.</p>
   <ol class="path">
     <li><button class="path-step" onclick="go('aprende')"><span class="path-n">01</span><span><span class="path-t">Aprende</span><span class="path-d">7 módulos (cobertura completa del artículo). Pasa el cursor o toca un término subrayado para ver la burbuja del glosario.</span></span></button></li>
-    <li><button class="path-step" onclick="go('animaciones')"><span class="path-n">02</span><span><span class="path-t">Animaciones</span><span class="path-d">Instancia única, replicación por offset, failover por quórum, hashslots y fork con copy-on-write.</span></span></button></li>
+    <li><button class="path-step" onclick="go('aprende')"><span class="path-n">02</span><span><span class="path-t">Figuras en Aprende</span><span class="path-d">Los esquemas y los flujos están junto al párrafo que los explica.</span></span></button></li>
     <li><button class="path-step" onclick="go('quiz')"><span class="path-n">03</span><span><span class="path-t">Quiz y casos</span><span class="path-d">38 preguntas (fundamentos, Memcached, single, HA, Sentinel, Cluster, persistencia, trade-offs) + 8 casos. Si fallas, el hueco es de estudio: repasa el módulo sugerido.</span></span></button></li>
   </ol>
 </section>
@@ -419,16 +419,6 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
   <h2>Aprende Redis desde cero</h2>
   <p class="lede">Sigue los módulos en orden. Los términos del glosario aparecen con <strong>subrayado punteado</strong>: hover o tap abre la burbuja. Los <strong>Trade-off</strong> son los que más caen en el quiz.</p>
   <div class="aprende-layout"><nav class="module-nav" id="moduleNav"></nav><div class="module-content" id="moduleContent"></div></div>
-</section>
-<section id="view-animaciones" class="view">
-  <span class="kicker">Laboratorio visual</span>
-  <h2>Animaciones interactivas</h2>
-  <p class="lede">Pulsa los botones y observa el sistema en movimiento. Cada animación muestra su estado (play / pausa / listo), barra de progreso y narrador paso a paso. Los controles extra cambian el escenario.</p>
-  <div class="card accent-teal" id="anim-single"><h3>1 · Instancia única: comando, memoria y fork</h3><p style="font-size:14px;">Un comando entra, se procesa en RAM y, si hay persistencia, un hijo creado por fork escribe RDB/AOF. Apaga la persistencia y mira qué pasa en un reinicio.</p><div class="controls"><button class="btn small" onclick="animSingle.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animSingle.play()">Reproducir</button><button class="btn small ghost" onclick="animSingle.reset()">Reiniciar</button></div><div class="controls"><label style="display:inline-flex; align-items:center; gap:8px; font-size:14px; color:var(--text); cursor:pointer;"><input type="checkbox" id="persistToggle" checked style="width:17px; height:17px; accent-color:var(--teal);"> Persistencia ON/OFF</label></div><figure><svg id="svgSingle" viewBox="0 0 720 330" role="img" aria-label="1 · Instancia única: comando, memoria y fork"></svg><figcaption>Instancia única · <span id="singleCaption">Pulsa "Siguiente paso".</span></figcaption></figure><p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m2')">Leer en Aprende → Módulo 2 · Single Redis Instance</button></p></div>
-  <div class="card accent-orange" id="anim-ha"><h3>2 · Replicación: replication ID + offset</h3><p style="font-size:14px;">El primario sube su offset con cada comando. Una réplica que reconecta recibe partial sync (delta) o full sync (RDB + buffer), y al promoverse hay un nuevo ID.</p><div class="controls"><button class="btn small" onclick="animHa.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animHa.play()">Reproducir</button><button class="btn small ghost" onclick="animHa.reset()">Reiniciar</button></div><div class="controls"><label style="display:inline-flex; align-items:center; gap:8px; font-size:14px; color:var(--text);">Réplica 2 reconecta con: <select id="haScenario" style="background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:5px 8px; font-size:13.5px;"><option value="partial">mismo replication ID (partial)</option><option value="full">ID desconocido (full)</option></select></label></div><figure><svg id="svgHa" viewBox="0 0 720 330" role="img" aria-label="2 · Replicación: replication ID + offset"></svg><figcaption>Replicación · <span id="haCaption">Pulsa "Siguiente paso".</span></figcaption></figure><p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m3')">Leer en Aprende → Módulo 3 · Redis HA</button></p></div>
-  <div class="card accent-purple" id="anim-sentinel"><h3>3 · Sentinel: quórum y failover</h3><p style="font-size:14px;">Tres sentinels vigilan al primario. Con quórum 2, el failover solo ocurre si al menos dos coinciden en que cayó. Mueve el control y observa.</p><div class="controls"><button class="btn small" onclick="animSentinel.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animSentinel.play()">Reproducir</button><button class="btn small ghost" onclick="animSentinel.reset()">Reiniciar</button></div><div class="controls"><label style="display:inline-flex; align-items:center; gap:8px; font-size:14px; color:var(--text);">Sentinels que ven caído al primario: <input type="range" id="sentVotes" min="1" max="3" step="1" value="3" style="width:120px;"> <b id="sentVotesLbl">3 de 3</b></label></div><figure><svg id="svgSentinel" viewBox="0 0 720 330" role="img" aria-label="3 · Sentinel: quórum y failover"></svg><figcaption>Sentinel · <span id="sentinelCaption">Pulsa "Siguiente paso".</span></figcaption></figure><p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m4')">Leer en Aprende → Módulo 4 · Redis Sentinel</button></p></div>
-  <div class="card accent-pink" id="anim-cluster"><h3>4 · Cluster: hashslots y reshard M1-M2-M3</h3><p style="font-size:14px;">La clave cae en un hashslot fijo; añadir M3 solo mueve slots. Elige una clave y mira si cambia de dueño. Al final, gossip y promoción de S1.</p><div class="controls"><button class="btn small" onclick="animCluster.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animCluster.play()">Reproducir</button><button class="btn small ghost" onclick="animCluster.reset()">Reiniciar</button></div><div class="controls"><label style="display:inline-flex; align-items:center; gap:8px; font-size:14px; color:var(--text);">Clave: <select id="clusterKey" style="background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:5px 8px; font-size:13.5px;"><option value="foo">foo (slot 12182)</option><option value="bar">bar (slot 5061)</option><option value="hello">hello (slot 866)</option></select></label></div><figure><svg id="svgCluster" viewBox="0 0 720 340" role="img" aria-label="4 · Cluster: hashslots y reshard M1-M2-M3"></svg><figcaption>Cluster · <span id="clusterCaption">Pulsa "Siguiente paso".</span></figcaption></figure><p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m5')">Leer en Aprende → Módulo 5 · Redis Cluster</button></p></div>
-  <div class="card accent-gold" id="anim-fork"><h3>5 · Fork y copy-on-write durante el snapshot</h3><p style="font-size:14px;">Padre e hijo comparten páginas; solo se copian las que el padre modifica mientras el hijo escribe el RDB. Elige cuántas páginas se modifican.</p><div class="controls"><button class="btn small" onclick="animFork.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animFork.play()">Reproducir</button><button class="btn small ghost" onclick="animFork.reset()">Reiniciar</button></div><div class="controls"><label style="display:inline-flex; align-items:center; gap:8px; font-size:14px; color:var(--text);">Páginas modificadas por el padre: <input type="range" id="forkWrites" min="0" max="4" step="1" value="1" style="width:120px;"> <b id="forkWritesLbl">1 / 4</b></label></div><figure><svg id="svgFork" viewBox="0 0 720 330" role="img" aria-label="5 · Fork y copy-on-write durante el snapshot"></svg><figcaption>Fork y copy-on-write durante el snapshot · <span id="forkCaption">Pulsa "Siguiente paso".</span></figcaption></figure><p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m6')">Leer en Aprende → Módulo 6 · Persistencia (fork + COW)</button></p></div>
 </section>
 <section id="view-quiz" class="view">
   <span class="kicker">Comprueba tu aprendizaje</span>
@@ -492,7 +482,7 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
   <div id="cheatsheetContent"></div>
 </section>
 </main>
-<footer>Herramienta de estudio sobre "Redis Explained" (Architecture Notes, Mahdi Yusuf, 2022). Leer → animar → practicar.</footer>
+<footer>Herramienta de estudio sobre "Redis Explained" (Architecture Notes, Mahdi Yusuf, 2022). Leer con las figuras → practicar.</footer>
 <script>
 const MODULES = [
 { id:'m0', tag:'Módulo 0', accent:'gold', title:'Qué es Redis: servidor de estructuras de datos',
@@ -956,13 +946,7 @@ function seededRandom(seed){ let s=seed>>>0; return ()=>{ s=(Math.imul(s,1664525
 function prepareShuffledMCQ(opts,correctIndex,seedKey){ const indices=opts.map((_,i)=>i); const rand=seededRandom(hashSeedStr(seedKey)); for(let i=indices.length-1;i>0;i--){ const j=Math.floor(rand()*(i+1)); [indices[i],indices[j]]=[indices[j],indices[i]]; } return { opts:indices.map(ix=>opts[ix]), a:indices.indexOf(correctIndex) }; }
 function shuffledQuizItem(qi){ const q=QUIZ[qi]; return prepareShuffledMCQ(q.opts,q.a,PAPER_SHUFFLE_ID+'|quiz|'+qi); }
 function shuffledMini(m){ return prepareShuffledMCQ(m.mini.opts,m.mini.a,PAPER_SHUFFLE_ID+'|mini|'+m.id); }
-const MODULE_ANIMS = {
-  m2: [{id:'anim-single', label:'Comando → memoria → fork'}],
-  m3: [{id:'anim-ha', label:'Replicación offset / sync'}],
-  m4: [{id:'anim-sentinel', label:'Sentinel: quórum y failover'}],
-  m5: [{id:'anim-cluster', label:'Hashslots y reshard'}],
-  m6: [{id:'anim-fork', label:'Fork + copy-on-write'}, {id:'anim-single', label:'Persistencia en instancia única'}]
-};
+const MODULE_ANIMS = {};
 const QUIZ_MODULE_HINT = {
   'trade-off':'m3', 'Fundamentos':'m0', 'Memcached':'m1', 'Single':'m2', 'HA':'m3',
   'Sentinel':'m4', 'Cluster':'m5', 'Persistencia':'m6'
@@ -976,6 +960,7 @@ function saveJSON(key, val){ try{ localStorage.setItem(key, JSON.stringify(val))
 
 function go(view, opts){
   opts = opts || {};
+  if (view === 'animaciones') view = 'aprende';
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   const elv = $('#view-'+view);
   if (!elv) return;
@@ -987,7 +972,6 @@ function go(view, opts){
   });
   if (!opts.keepScroll) window.scrollTo({top:0, behavior: opts.instant ? 'auto' : 'smooth'});
   if (view==='quiz' && !quiz.rendered) quiz.render();
-  if (view==='animaciones' && !animsRendered) initAnims();
   if (view==='quiz' && opts.panel) setQuizPanel(opts.panel);
   if (view==='animaciones' && opts.animId) {
     requestAnimationFrame(()=>{
@@ -1062,7 +1046,7 @@ function updateContinueCard(){
   } else if (lastView.view === 'quiz') {
     detail = '<strong>Quiz</strong> — modo ' + (lastView.mode||'estudio') + (quizWrong.length ? ' · ' + quizWrong.length + ' falladas guardadas' : '') + (quizScores.length ? ' · último ' + quizScores[quizScores.length-1] + '%' : '');
   } else if (lastView.view === 'animaciones') {
-    detail = '<strong>Animaciones</strong> — laboratorio visual';
+    detail = '<strong>Aprende</strong> — figuras junto al texto';
   } else if (lastView.view === 'glosario') {
     detail = '<strong>Glosario</strong>';
   } else if (lastView.view === 'cheatsheet') {
@@ -1705,5 +1689,7 @@ enhanceTips($('#cheatsheetContent'));
   else if (parts[0]==='cheatsheet') go('cheatsheet', {instant:true});
 })();
 </script>
+<script src="../assets/gsap.min.js"></script>
+<script src="../assets/learn-stage.js"></script>
 </body>
 </html>

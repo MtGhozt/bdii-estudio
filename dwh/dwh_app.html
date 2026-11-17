@@ -358,6 +358,7 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
 }
 
 </style>
+  <link rel="stylesheet" href="../assets/learn-stage.css">
 </head>
 <body><a class="skip-link" href="#main">Saltar al contenido</a>
 <header>
@@ -368,7 +369,6 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
     <nav class="tabs" id="tabs" role="tablist" aria-label="Vistas de estudio">
       <button class="tab active" role="tab" aria-selected="true" data-view="inicio">Inicio</button>
       <button class="tab" role="tab" aria-selected="false" data-view="aprende">Aprende</button>
-      <button class="tab" role="tab" aria-selected="false" data-view="animaciones">Animaciones</button>
       <button class="tab" role="tab" aria-selected="false" data-view="quiz">Quiz & Casos</button>
       <button class="tab" role="tab" aria-selected="false" data-view="glosario">Glosario</button>
       <button class="tab" role="tab" aria-selected="false" data-view="cheatsheet">Cheatsheet</button>
@@ -413,7 +413,7 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
   <p class="lede">Tres pasos, en orden. Cada uno prepara el siguiente.</p>
   <ol class="path">
     <li><button class="path-step" onclick="go('aprende')"><span class="path-n">01</span><span><span class="path-t">Aprende</span><span class="path-d">9 módulos (m0–m8): Inmon, arquitectura, Kimball, SCD y OLAP. Hover en términos del glosario.</span></span></button></li>
-    <li><button class="path-step" onclick="go('animaciones')"><span class="path-n">02</span><span><span class="path-t">Animaciones</span><span class="path-d">Pipeline, OLTP/OLAP, estrella, SCD Type 2, cubo OLAP y ETL vs ELT.</span></span></button></li>
+    <li><button class="path-step" onclick="go('aprende')"><span class="path-n">02</span><span><span class="path-t">Figuras en Aprende</span><span class="path-d">Los esquemas y los flujos están junto al párrafo que los explica.</span></span></button></li>
     <li><button class="path-step" onclick="go('quiz')"><span class="path-n">03</span><span><span class="path-t">Quiz y casos</span><span class="path-d">Preguntas de examen y casos retail (grano, bus matrix, inventario semi-aditivo).</span></span></button></li>
   </ol>
 </section>
@@ -422,41 +422,6 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
   <h2>Aprende Data Warehouse desde cero</h2>
   <p class="lede">Sigue los módulos en orden. Fuente: apuntes de Data Warehouse (Inmon, Kimball, grano, SCD, OLAP) y el caso retail. Los términos con <strong>subrayado punteado</strong> abren el glosario. Los <strong>Trade-off</strong> son los que más caen en el quiz.</p>
   <div class="aprende-layout"><nav class="module-nav" id="moduleNav"></nav><div class="module-content" id="moduleContent"></div></div>
-</section>
-<section id="view-animaciones" class="view">
-  <span class="kicker">Laboratorio visual</span>
-  <h2>Animaciones interactivas</h2>
-  <p class="lede">Pipeline del almacén, OLTP frente a OLAP, estrella, SCD Type 2, cubo y ETL/ELT. Cada animación tiene play/paso y narrador.</p>
-  <div class="card accent-blue" id="anim-pipeline"><h3>1 · Pipeline: fuentes, staging, DWH, marts, BI</h3>
-    <p style="font-size:14px;">El lote sale del POS, aterriza crudo, se integra y recién entonces alimenta el dashboard.</p>
-    <div class="controls"><button class="btn small" onclick="animPipeline.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animPipeline.play()">Reproducir</button><button class="btn small ghost" onclick="animPipeline.reset()">Reiniciar</button></div>
-    <figure><svg id="svgGraph" viewBox="0 0 720 340" role="img" aria-label="Pipeline DWH"></svg><figcaption>Pipeline · <span id="graphCaption">Pulsa "Siguiente paso".</span></figcaption></figure>
-    <p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m2')">Leer en Aprende → Módulo 2</button></p></div>
-  <div class="card accent-purple" id="anim-oltp-olap"><h3>2 · OLTP de caja frente a OLAP</h3>
-    <p style="font-size:14px;">Stock de un SKU ahora mismo, contra ventas de categoría en el trimestre.</p>
-    <div class="controls"><button class="btn small" onclick="animOltpOlap.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animOltpOlap.play()">Reproducir</button><button class="btn small ghost" onclick="animOltpOlap.reset()">Reiniciar</button></div>
-    <figure><svg id="svgCheck" viewBox="0 0 720 360" role="img" aria-label="OLTP vs OLAP"></svg><figcaption>OLTP / OLAP · <span id="checkCaption">Pulsa "Siguiente paso".</span></figcaption></figure>
-    <p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m1')">Leer en Aprende → Módulo 1</button></p></div>
-  <div class="card accent-teal" id="anim-star"><h3>3 · Estrella de FactVentas</h3>
-    <p style="font-size:14px;">Hecho al centro, dimensiones alrededor y <code>ticket_id</code> degenerado.</p>
-    <div class="controls"><button class="btn small" onclick="animStar.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animStar.play()">Reproducir</button><button class="btn small ghost" onclick="animStar.reset()">Reiniciar</button></div>
-    <figure><svg id="svgEnemy" viewBox="0 0 720 300" role="img" aria-label="Esquema estrella"></svg><figcaption>Estrella · <span id="enemyCaption">Pulsa "Siguiente paso".</span></figcaption></figure>
-    <p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m5')">Leer en Aprende → Módulo 5</button></p></div>
-  <div class="card accent-orange" id="anim-scd2"><h3>4 · SCD Type 2: Ana pasa a VIP</h3>
-    <p style="font-size:14px;">Nueva fila con vigencia. Las ventas viejas siguen en la surrogate anterior.</p>
-    <div class="controls"><button class="btn small" onclick="animScd2.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animScd2.play()">Reproducir</button><button class="btn small ghost" onclick="animScd2.reset()">Reiniciar</button></div>
-    <figure><svg id="svgZookie" viewBox="0 0 720 340" role="img" aria-label="SCD Type 2"></svg><figcaption>SCD 2 · <span id="zookieCaption">Pulsa "Siguiente paso".</span></figcaption></figure>
-    <p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m7')">Leer en Aprende → Módulo 7</button></p></div>
-  <div class="card accent-gold" id="anim-cube"><h3>5 · Operaciones OLAP</h3>
-    <p style="font-size:14px;">Roll-up, drill-down, slice, dice y pivot sobre el cubo de ventas.</p>
-    <div class="controls"><button class="btn small" onclick="animCube.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animCube.play()">Reproducir</button><button class="btn small ghost" onclick="animCube.reset()">Reiniciar</button></div>
-    <figure><svg id="svgArch" viewBox="0 0 720 360" role="img" aria-label="Operaciones OLAP"></svg><figcaption>Cubo · <span id="archCaption">Pulsa "Siguiente paso".</span></figcaption></figure>
-    <p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m8')">Leer en Aprende → Módulo 8</button></p></div>
-  <div class="card accent-pink" id="anim-etl-elt"><h3>6 · ETL frente a ELT</h3>
-    <p style="font-size:14px;">Transformar antes de cargar, o cargar crudo y transformar con SQL en el destino.</p>
-    <div class="controls"><button class="btn small" onclick="animEtlElt.step()">Siguiente paso →</button><button class="btn small ghost" onclick="animEtlElt.play()">Reproducir</button><button class="btn small ghost" onclick="animEtlElt.reset()">Reiniciar</button></div>
-    <figure><svg id="svgEtl" viewBox="0 0 720 340" role="img" aria-label="ETL vs ELT"></svg><figcaption>ETL / ELT · <span id="etlCaption">Pulsa "Siguiente paso".</span></figcaption></figure>
-    <p class="anim-learn-link"><button class="linklike" type="button" onclick="goModule('m3')">Leer en Aprende → Módulo 3</button></p></div>
 </section>
 <section id="view-quiz" class="view">
   <span class="kicker">Comprueba tu aprendizaje</span>
@@ -520,7 +485,7 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
   <div id="cheatsheetContent"></div>
 </section>
 </main>
-<footer>Herramienta de estudio sobre Data Warehouse (Inmon, Kimball, SCD y OLAP · caso retail). Leer → animar → practicar.</footer>
+<footer>Herramienta de estudio sobre Data Warehouse (Inmon, Kimball, SCD y OLAP · caso retail). Leer con las figuras → practicar.</footer>
 <script>
 const MODULES = [
 { id:'m0', tag:'Módulo 0', accent:'gold', title:'Qué es un Data Warehouse y por qué se separa del OLTP',
@@ -1098,17 +1063,7 @@ function seededRandom(seed){ let s=seed>>>0; return ()=>{ s=(Math.imul(s,1664525
 function prepareShuffledMCQ(opts,correctIndex,seedKey){ const indices=opts.map((_,i)=>i); const rand=seededRandom(hashSeedStr(seedKey)); for(let i=indices.length-1;i>0;i--){ const j=Math.floor(rand()*(i+1)); [indices[i],indices[j]]=[indices[j],indices[i]]; } return { opts:indices.map(ix=>opts[ix]), a:indices.indexOf(correctIndex) }; }
 function shuffledQuizItem(qi){ const q=QUIZ[qi]; return prepareShuffledMCQ(q.opts,q.a,PAPER_SHUFFLE_ID+'|quiz|'+qi); }
 function shuffledMini(m){ return prepareShuffledMCQ(m.mini.opts,m.mini.a,PAPER_SHUFFLE_ID+'|mini|'+m.id); }
-const MODULE_ANIMS = {
-  m0: [{id:'anim-oltp-olap', label:'OLTP vs OLAP'}],
-  m1: [{id:'anim-oltp-olap', label:'OLTP vs OLAP'}],
-  m2: [{id:'anim-pipeline', label:'Pipeline staging → BI'}],
-  m3: [{id:'anim-etl-elt', label:'ETL vs ELT'}],
-  m4: [{id:'anim-star', label:'Grano en la estrella'}],
-  m5: [{id:'anim-star', label:'Esquema estrella'}],
-  m6: [{id:'anim-star', label:'Hecho y dimensiones'}],
-  m7: [{id:'anim-scd2', label:'SCD Type 2'}],
-  m8: [{id:'anim-cube', label:'Operaciones OLAP'}]
-};
+const MODULE_ANIMS = {};
 const QUIZ_MODULE_HINT = {
   'Inmon':'m1', 'OLTP/OLAP':'m1', 'Arquitectura':'m2', 'ETL/ELT':'m3', 'Kimball':'m3',
   'Grain':'m4', 'Estrella':'m5', 'Medidas':'m6', 'SCD':'m7', 'OLAP':'m8', 'Lake':'m8',
@@ -1123,6 +1078,7 @@ function saveJSON(key, val){ try{ localStorage.setItem(key, JSON.stringify(val))
 
 function go(view, opts){
   opts = opts || {};
+  if (view === 'animaciones') view = 'aprende';
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   const elv = $('#view-'+view);
   if (!elv) return;
@@ -1134,7 +1090,6 @@ function go(view, opts){
   });
   if (!opts.keepScroll) window.scrollTo({top:0, behavior: opts.instant ? 'auto' : 'smooth'});
   if (view==='quiz' && !quiz.rendered) quiz.render();
-  if (view==='animaciones' && !animsRendered) initAnims();
   if (view==='quiz' && opts.panel) setQuizPanel(opts.panel);
   if (view==='animaciones' && opts.animId) {
     requestAnimationFrame(()=>{
@@ -1209,7 +1164,7 @@ function updateContinueCard(){
   } else if (lastView.view === 'quiz') {
     detail = '<strong>Quiz</strong> — modo ' + (lastView.mode||'estudio') + (quizWrong.length ? ' · ' + quizWrong.length + ' falladas guardadas' : '') + (quizScores.length ? ' · último ' + quizScores[quizScores.length-1] + '%' : '');
   } else if (lastView.view === 'animaciones') {
-    detail = '<strong>Animaciones</strong> — laboratorio visual';
+    detail = '<strong>Aprende</strong> — figuras junto al texto';
   } else if (lastView.view === 'glosario') {
     detail = '<strong>Glosario</strong>';
   } else if (lastView.view === 'cheatsheet') {
@@ -1942,5 +1897,7 @@ enhanceTips($('#cheatsheetContent'));
   else if (parts[0]==='cheatsheet') go('cheatsheet', {instant:true});
 })();
 </script>
+<script src="../assets/gsap.min.js"></script>
+<script src="../assets/learn-stage.js"></script>
 </body>
 </html>
