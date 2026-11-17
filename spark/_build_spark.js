@@ -56,7 +56,7 @@ const inicioHTML = `<section id="view-inicio" class="view active">
           <div class="cc-label">Continuar</div>
           <div class="cc-detail" id="continueDetail"></div>
         </div>
-        <button class="btn teal small" id="continueBtn" type="button">Seguir donde lo dejé →</button>
+        <button class="btn teal" id="continueBtn" type="button">Seguir donde lo dejé →</button>
       </div>
     </div>
     <div class="hero-cards">

@@ -312,10 +312,13 @@ footer{margin-top:60px; padding:24px 20px; border-top:1px solid var(--border-sof
 /* ============ STUDY UX v5 (resume / TOC / quiz modes / comfort) ============ */
 .progress-meta{display:flex; justify-content:space-between; gap:10px; align-items:center; max-width:1480px; margin:0 auto; padding:4px 20px 6px; font-family:var(--mono); font-size:11px; color:var(--dim); flex-wrap:wrap;}
 .progress-meta b{color:var(--muted); font-weight:650;}
-.continue-card{margin:18px 0 0; padding:14px 16px; background:var(--surface2); border:1px solid var(--border-soft); border-left:3px solid var(--blue); border-radius:6px; display:flex; gap:14px; align-items:center; flex-wrap:wrap;}
-.continue-card .cc-label{font-family:var(--mono); font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--blue); font-weight:700;}
-.continue-card .cc-detail{font-size:14px; color:var(--muted); flex:1; min-width:200px;}
+.continue-card{margin:18px 0 0; padding:14px 16px; background:var(--surface2); border:1px solid var(--border-soft); border-left:3px solid var(--blue); border-radius:6px; display:flex; gap:12px 18px; align-items:center; justify-content:space-between; flex-wrap:wrap;}
+.continue-card > div:first-child{flex:1; min-width:min(100%, 200px);}
+.continue-card .cc-label{font-family:var(--mono); font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--blue); font-weight:700; line-height:1.2;}
+.continue-card .cc-detail{font-size:14px; color:var(--muted); margin-top:3px; line-height:1.4;}
+.continue-card .cc-detail:empty{display:none; margin:0;}
 .continue-card .cc-detail strong{color:var(--text);}
+.continue-card #continueBtn{flex-shrink:0; align-self:center;}
 .module-outline{position:sticky; top:78px; z-index:5; display:flex; gap:6px; flex-wrap:wrap; padding:8px 0 10px; margin:0 0 8px; background:linear-gradient(var(--bg) 70%, transparent); border-bottom:1px solid var(--border-soft);}
 .module-outline a{font-family:var(--mono); font-size:11px; font-weight:650; color:var(--muted); text-decoration:none; padding:4px 9px; border-radius:999px; border:1px solid var(--border-soft); background:var(--surface); white-space:nowrap;}
 .module-outline a:hover{color:var(--text); border-color:var(--dim); text-decoration:none;}
@@ -392,7 +395,7 @@ body.light .module-outline{background:linear-gradient(var(--bg) 70%, transparent
           <div class="cc-label">Continuar</div>
           <div class="cc-detail" id="continueDetail"></div>
         </div>
-        <button class="btn teal small" id="continueBtn" type="button">Seguir donde lo dejé →</button>
+        <button class="btn teal" id="continueBtn" type="button">Seguir donde lo dejé →</button>
       </div>
     </div>
     <div class="hero-cards">
