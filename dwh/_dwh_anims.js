@@ -91,17 +91,17 @@ init(){ this.svg=$('#svgEnemy'); svgDefs(this.svg);
   this.cap=$('#enemyCaption'); this.draw();
   animSetUI(this.ch,this.playBtn,'idle',0,5,null,this.cap,'Pulsa "Siguiente paso" o "Reproducir".'); },
 draw(){ const s=this.svg; s.innerHTML=''; svgDefs(s);
-  s.appendChild(nodeBox(360,130,'fact_ventas',cBlue,cBlue));
-  s.appendChild(nodeBox(140,48,'dim_fecha',cTeal,cTeal));
-  s.appendChild(nodeBox(360,48,'dim_producto',cTeal,cTeal));
-  s.appendChild(nodeBox(580,48,'dim_tienda',cTeal,cTeal));
-  s.appendChild(nodeBox(200,230,'dim_cliente',cPurple,cPurple));
-  s.appendChild(nodeBox(520,230,'ticket_id',cGold,cGold));
-  arrow(s,200,70,320,112,cTeal,'');
-  arrow(s,360,70,360,108,cTeal,'');
-  arrow(s,520,70,400,112,cTeal,'');
-  arrow(s,300,152,230,210,cPurple,'');
-  arrow(s,420,152,500,210,cGold,'degen.');
+  s.appendChild(nodeBox(360,170,'fact_ventas',cBlue,cBlue));
+  s.appendChild(nodeBox(140,40,'dim_fecha',cTeal,cTeal));
+  s.appendChild(nodeBox(360,40,'dim_producto',cTeal,cTeal));
+  s.appendChild(nodeBox(580,40,'dim_tienda',cTeal,cTeal));
+  s.appendChild(nodeBox(200,270,'dim_cliente',cPurple,cPurple));
+  s.appendChild(nodeBox(520,270,'ticket_id',cGold,cGold));
+  arrow(s,200,62,320,150,cTeal,'');
+  arrow(s,360,62,360,148,cTeal,'');
+  arrow(s,520,62,400,150,cTeal,'');
+  arrow(s,300,192,230,250,cPurple,'');
+  arrow(s,420,192,500,250,cGold,'degen.');
 },
 advance(manual){ if(this.idx>=this.steps.length) return;
   const st=this.steps[this.idx];
